@@ -5,13 +5,14 @@ import os
 import json
 import traceback
 import re
+import urllib.parse
 from aiohttp import web
 
 import server # ComfyUI server instance
 from ..utils import get_request_json, resolve_huggingface_api_key
 from ...downloader.manager import manager as download_manager
 from ...api.huggingface import HuggingFaceAPI
-from ...utils.helpers import get_model_dir, parse_huggingface_input, sanitize_filename
+from ...utils.helpers import get_model_dir, parse_huggingface_input, sanitize_filename, hf_ref_from_url
 from ...config import METADATA_SUFFIX, PREVIEW_SUFFIX
 
 prompt_server = server.PromptServer.instance
@@ -107,7 +108,10 @@ async def route_download_model(request):
             # For repo downloads, don't construct URL - let huggingface_hub handle it
             download_url = None
         else:
-            download_url = f"https://huggingface.co/{target_model_id}/resolve/main/{target_filename}"
+            # Keep the branch/commit the user pasted instead of assuming 'main'
+            ref = urllib.parse.quote(hf_ref_from_url(model_url_or_id), safe='')
+            download_url = (f"https://huggingface.co/{target_model_id}/resolve/"
+                            f"{ref}/{urllib.parse.quote(target_filename)}")
         
         download_info = {
             "model_url_or_id": model_url_or_id,

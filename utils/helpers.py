@@ -47,80 +47,100 @@ MODEL_TYPE_ALIASES_COMPACT = {
     re.sub(r'[^a-z0-9]', '', k): v for k, v in MODEL_TYPE_ALIASES.items()
 }
 
+def _get_models_dir() -> Optional[str]:
+    """ComfyUI's main models/ directory, or None if it cannot be located."""
+    models_dir = getattr(folder_paths, 'models_dir', None)
+    if not models_dir:
+        base = getattr(folder_paths, 'base_path', None)
+        models_dir = os.path.join(base, 'models') if base else None
+    return models_dir if models_dir and os.path.isdir(models_dir) else None
+
+def _resolve_models_subdir(name: str) -> Optional[str]:
+    """Return the real path of models/<name>, matching case-insensitively.
+
+    The Model Type dropdown is built from the actual folder names under models/
+    (see server/routes/GetModelTypes.py) but they reach us lowercased, so 'llm'
+    still has to find the folder named 'LLM'.
+    """
+    models_dir = _get_models_dir()
+    if not models_dir or not name:
+        return None
+    candidate = os.path.join(models_dir, name)
+    if os.path.isdir(candidate):
+        return candidate
+    try:
+        for entry in os.listdir(models_dir):
+            if entry.lower() == name.lower() and os.path.isdir(os.path.join(models_dir, entry)):
+                return os.path.join(models_dir, entry)
+    except OSError:
+        pass
+    return None
+
+def _comfy_folder_paths(model_type: str) -> List[str]:
+    """folder_paths.get_folder_paths() without the exception handling at each call site."""
+    try:
+        return list(folder_paths.get_folder_paths(model_type) or [])
+    except Exception:
+        return []
+
 def _normalize_model_type(model_type: str) -> str:
     """Normalize model type string to canonical form."""
     if not model_type:
         return "other"
-    
+
     normalized = model_type.lower().strip()
-    
+
     # Try exact match first
     if normalized in MODEL_TYPE_ALIASES:
         return MODEL_TYPE_ALIASES[normalized]
-    
+
     # Try compact match (remove non-alphanumeric chars)
     compact = re.sub(r'[^a-z0-9]', '', normalized)
     if compact in MODEL_TYPE_ALIASES_COMPACT:
         return MODEL_TYPE_ALIASES_COMPACT[compact]
-    
+
+    # The alias table above predates most of ComfyUI's model folders
+    # (text_encoders, clip_vision, audio_encoders, model_patches, ...). The type
+    # dropdown offers every one of them, so accept anything ComfyUI registers or
+    # that exists under models/ instead of diverting it to other_models.
+    if _comfy_folder_paths(normalized) or _resolve_models_subdir(normalized):
+        return normalized
+
     return "other"
 
+def _append_subdir(base_path: str, selected_subdir: str) -> str:
+    """Append a user-selected subfolder, refusing to escape base_path."""
+    if not selected_subdir:
+        return base_path
+    parts = [p for p in re.split(r'[\\/]+', selected_subdir) if p and p not in ('.', '..')]
+    return os.path.join(base_path, *parts) if parts else base_path
+
 def get_model_dir(model_type: str, explicit_save_root: str = "", selected_subdir: str = "") -> Optional[str]:
-    """Get the directory path for a given model type."""
+    """Get the directory path for a given model type, including any subfolder."""
     try:
-        # Normalize the model type
-        normalized_type = _normalize_model_type(model_type)
-        
-        # Use explicit root if provided
+        # An explicit root overrides the model type entirely
         if explicit_save_root:
-            base_path = explicit_save_root
-            # If selected_subdir is provided, append it
-            if selected_subdir:
-                base_path = os.path.join(base_path, selected_subdir)
-            return base_path
-        
-        # Try ComfyUI's folder_paths first
-        try:
-            if normalized_type in ["checkpoints", "loras", "vae", "embeddings", "hypernetworks", "controlnet", "upscale_models"]:
-                return folder_paths.get_folder_paths(normalized_type)[0]
-            elif normalized_type in ["diffusion_models", "motion_models", "unet", "diffusers"]:
-                # These might not be standard ComfyUI types, try to get them
-                try:
-                    return folder_paths.get_folder_paths(normalized_type)[0]
-                except:
-                    # Fallback: try unet for diffusion_models
-                    if normalized_type == "diffusion_models":
-                        try:
-                            return folder_paths.get_folder_paths("diffusion_models")[0]
-                        except:
-                            # If diffusion_models doesn't exist, try unet
-                            try:
-                                return folder_paths.get_folder_paths("unet")[0]
-                            except:
-                                # Fallback to checkpoints
-                                return folder_paths.get_folder_paths("checkpoints")[0]
-                    elif normalized_type == "unet":
-                        try:
-                            return folder_paths.get_folder_paths("unet")[0]
-                        except:
-                            # Fallback to checkpoints
-                            return folder_paths.get_folder_paths("checkpoints")[0]
-                    else:
-                        # For other types, try diffusion_models first
-                        try:
-                            return folder_paths.get_folder_paths("diffusion_models")[0]
-                        except:
-                            # Fallback to checkpoints
-                            return folder_paths.get_folder_paths("checkpoints")[0]
-            else:
-                # For other types, use our extension directory instead of custom_nodes
-                from ..config import PLUGIN_ROOT
-                return os.path.join(PLUGIN_ROOT, "other_models")
-            
-        except:
-            # Fallback to base_path + type
-            return os.path.join(folder_paths.base_path, normalized_type)
-            
+            return _append_subdir(explicit_save_root, selected_subdir)
+
+        normalized_type = _normalize_model_type(model_type)
+        raw_type = (model_type or "").lower().strip()
+        other_models = os.path.join(PLUGIN_ROOT, "other_models")
+
+        if normalized_type == "other" and raw_type != "other":
+            # "other" is _normalize_model_type()'s "I don't know" sentinel, so an
+            # unrecognised type must not be resolved against a real models/other
+            # folder. Keep it inside the plugin rather than guessing.
+            base_dir = other_models
+        else:
+            # Ask ComfyUI first: it honours extra_model_paths.yaml and the legacy
+            # aliases (e.g. diffusion_models resolving to models/unet).
+            paths = _comfy_folder_paths(normalized_type)
+            base_dir = paths[0] if paths else _resolve_models_subdir(normalized_type)
+            if not base_dir:
+                base_dir = other_models
+
+        return _append_subdir(base_dir, selected_subdir)
+
     except Exception as e:
         print(f"Error getting model directory for {model_type}: {e}")
         return None
@@ -143,73 +163,86 @@ def sanitize_filename(filename: str) -> str:
     
     return sanitized.strip()
 
+# URL segments that mean "this points at a path inside the repo".
+# 'blob' is what the HuggingFace web UI shows in the address bar, 'resolve' is
+# the raw-download form, 'tree' is a folder listing (a repo reference, not a file).
+_HF_FILE_MARKERS = ("resolve", "blob", "raw")
+_HF_PATH_MARKERS = _HF_FILE_MARKERS + ("tree",)
+
+def _split_hf_url(url: str) -> tuple[str | None, str | None, str | None, str | None]:
+    """Split a huggingface.co URL into (model_id, marker, ref, path).
+
+    marker/ref/path are None when the URL only identifies a repo.
+    """
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except Exception as e:
+        print(f"Warning: Could not parse HF URL '{url}': {e}")
+        return None, None, None, None
+
+    if "huggingface.co" not in parsed.netloc.lower():
+        return None, None, None, None
+
+    parts = [p for p in parsed.path.split('/') if p]
+    if len(parts) < 2:
+        return None, None, None, None
+
+    model_id = "/".join(parts[:2])
+    if len(parts) >= 4 and parts[2] in _HF_PATH_MARKERS:
+        # /<owner>/<repo>/<marker>/<ref>/<path...>
+        return model_id, parts[2], urllib.parse.unquote(parts[3]), "/".join(parts[4:])
+    return model_id, None, None, None
+
 def parse_huggingface_input(url_or_id: str) -> tuple[str | None, str | None]:
     """
     Parses HuggingFace URL or ID string.
     Returns: (model_id, filename) tuple. Both can be None.
-    Handles URLs like:
-    - https://huggingface.co/FX-FeiHou/wan2.2-Remix/resolve/main/NSFW/Wan2.2_Remix_NSFW_i2v_14b_high_lighting_fp8_e4m3fn_v2.1.safetensors
-    - FX-FeiHou/wan2.2-Remix
+
+    filename is None when the input names a whole repo, which makes the caller
+    download every file in it - so single-file URLs must be recognised here.
+    Handles:
+    - https://huggingface.co/Comfy-Org/gemma-4/blob/main/text_encoders/model.safetensors
+    - https://huggingface.co/Comfy-Org/gemma-4/resolve/main/text_encoders/model.safetensors
+    - https://huggingface.co/Comfy-Org/gemma-4
+    - Comfy-Org/gemma-4
     """
     if not url_or_id:
         return None, None
 
     url_or_id = str(url_or_id).strip()
-    model_id: str | None = None
-    filename: str | None = None
 
-    # Check if it's a direct download URL
-    if "/resolve/main/" in url_or_id:
-        try:
-            parsed_url = urllib.parse.urlparse(url_or_id)
-            print(f"[DEBUG] Parsed URL: {parsed_url}")
-            print(f"[DEBUG] Path parts: {parsed_url.path.split('/')}")
-            
-            # Extract model ID from path
-            path_parts = parsed_url.path.split('/')
-            print(f"[DEBUG] Path parts length: {len(path_parts)}")
-            print(f"[DEBUG] Path parts[2]: {path_parts[2] if len(path_parts) > 2 else 'None'}")
-            
-            if len(path_parts) >= 4 and path_parts[3] == "resolve":
-                # URL format: /FX-FeiHou/wan2.2-Remix/resolve/main/NSFW/file.safetensors
-                model_id = "/".join(path_parts[1:3])  # FX-FeiHou/wan2.2-Remix
-                filename = "/".join(path_parts[4:])  # main/NSFW/file.safetensors
-                # Remove "main/" from filename if it's duplicated
-                if filename.startswith("main/"):
-                    filename = filename[5:]  # Remove "main/" prefix
-                print(f"[DEBUG] Extracted model_id: {model_id}")
-                print(f"[DEBUG] Extracted filename: {filename}")
-                print(f"Parsed HF download URL - Model: {model_id}, File: {filename}")
-                return model_id, filename
-            else:
-                print(f"[DEBUG] Path does not match expected format")
-        except Exception as e:
-            print(f"Warning: Could not parse HF download URL '{url_or_id}': {e}")
-            return None, None
-    
-    # Check if it's a simple model ID (username/repo format)
+    # Plain "owner/repo", no scheme
     if "/" in url_or_id and not url_or_id.startswith("http"):
-        parts = url_or_id.split("/")
+        parts = [p for p in url_or_id.split("/") if p]
         if len(parts) >= 2:
             model_id = "/".join(parts[0:2])
             print(f"Parsed HF model ID: {model_id}")
             return model_id, None
-    
-    # Try parsing as full URL
-    try:
-        parsed_url = urllib.parse.urlparse(url_or_id)
-        
-        if "huggingface.co" in parsed_url.netloc.lower():
-            path_parts = parsed_url.path.split('/')
-            if len(path_parts) >= 3:
-                model_id = "/".join(path_parts[1:3])  # Extract username/repo
-                print(f"Parsed HF URL - Model: {model_id}")
-                return model_id, None
-    except Exception as e:
-        print(f"Warning: Could not parse HF URL '{url_or_id}': {e}")
-    
-    print(f"Input '{url_or_id}' is not a recognizable HF model ID or URL.")
-    return None, None
+        return None, None
+
+    model_id, marker, _ref, path = _split_hf_url(url_or_id)
+    if not model_id:
+        print(f"Input '{url_or_id}' is not a recognizable HF model ID or URL.")
+        return None, None
+
+    if marker in _HF_FILE_MARKERS and path:
+        print(f"Parsed HF file URL - Model: {model_id}, File: {path}")
+        return model_id, path
+
+    print(f"Parsed HF URL - Model: {model_id}")
+    return model_id, None
+
+def hf_ref_from_url(url_or_id: str) -> str:
+    """The branch/tag/commit a HuggingFace file URL points at. Defaults to 'main'."""
+    if not url_or_id:
+        return "main"
+    url_or_id = str(url_or_id).strip()
+    if not url_or_id.startswith("http"):
+        return "main"
+    _model_id, marker, ref, _path = _split_hf_url(url_or_id)
+    if marker in _HF_FILE_MARKERS and ref:
+        return ref
+    return "main"
 
 def get_model_folder_paths(model_type: str) -> List[str]:
     """Get all folder paths for a given model type."""
