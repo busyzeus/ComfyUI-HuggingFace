@@ -8,11 +8,20 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ESCAPES[ch]);
 }
 
+// A repo whose files each belong in a different models/ folder has no single
+// correct save location, so the form stops offering one.
+export function setSaveLocationEnabled(ui, enabled) {
+  for (const el of [ui.downloadModelTypeSelect, ui.subdirSelect]) {
+    if (el) el.disabled = !enabled;
+  }
+}
+
 export function renderDownloadPreview(ui, data) {
   if (!ui.downloadPreviewArea) return;
   ui.ensureFontAwesome();
 
   if (!data || data.success === false) {
+    setSaveLocationEnabled(ui, true);
     const message = data?.error || 'Model details not available';
     ui.downloadPreviewArea.innerHTML =
       `<p style="color: var(--input-text, #ccc);">${escapeHtml(message)}</p>`;
@@ -36,6 +45,10 @@ export function renderDownloadPreview(ui, data) {
   const sizeOf = (file) =>
     typeof file.size === 'number' ? ui.formatBytes(file.size) : 'size unknown';
 
+  // The save folder is worked out per file on the server, which knows what
+  // exists under models/. A repo can send each file somewhere different.
+  const typeByPath = new Map(files.map(f => [f.path, f.model_type]));
+
   const totalSize = files.reduce((sum, f) => sum + (f.size || 0), 0);
 
   const badge = (text) =>
@@ -46,14 +59,30 @@ export function renderDownloadPreview(ui, data) {
     return `<option value="${escapeHtml(f.path)}"${selected}>${escapeHtml(f.path)} • ${sizeOf(f)}</option>`;
   }).join('');
 
+  const perFileDestinations = data.per_file_destinations === true;
+  const routingPerFile = perFileDestinations && !selectedFile;
+  setSaveLocationEnabled(ui, !routingPerFile);
+
+  const destinations = [...new Set(files.map(f => f.model_type).filter(Boolean))].sort();
+  const allFilesLabel = perFileDestinations
+    ? `All ${files.length} files (${ui.formatBytes(totalSize)}), each to its own folder`
+    : `Entire repo (${files.length} files, ${ui.formatBytes(totalSize)})`;
+
   // Whole-repo downloads are a real footgun on repos that ship several
-  // variants of the same weights, so say how much that would actually cost.
-  const repoWarning = (!selectedFile && files.length > 1)
-    ? `<p style="font-size: 0.9em; color: #e0a030; margin-top: 8px;">
+  // variants of the same weights, so say what that would actually do.
+  let repoNote = '';
+  if (routingPerFile) {
+    repoNote = `<p style="font-size: 0.9em; color: #7fb3d5; margin-top: 8px;">
+         <i class="fas fa-info-circle"></i>
+         Save location is per file here: ${escapeHtml(destinations.join(', '))}.
+         Pick a single file to override it.
+       </p>`;
+  } else if (!selectedFile && files.length > 1) {
+    repoNote = `<p style="font-size: 0.9em; color: #e0a030; margin-top: 8px;">
          <i class="fas fa-exclamation-triangle"></i>
          No file selected, so the whole repo downloads: ${files.length} files, ${ui.formatBytes(totalSize)}.
-       </p>`
-    : '';
+       </p>`;
+  }
 
   ui.downloadPreviewArea.innerHTML = `
     <div class="huggingface-search-item" style="background-color: var(--comfy-input-bg); padding: 10px;">
@@ -75,13 +104,13 @@ export function renderDownloadPreview(ui, data) {
           <div class="huggingface-form-group" style="margin-top: 10px;">
             <label for="huggingface-file-picker">File to download</label>
             <select id="huggingface-file-picker" class="huggingface-select">
-              <option value="">Entire repo (${files.length} files, ${ui.formatBytes(totalSize)})</option>
+              <option value="">${escapeHtml(allFilesLabel)}</option>
               ${fileOptions}
             </select>
             <p style="font-size: 0.9em; color: #aaa; margin-top: 6px;">Picking a file rewrites the URL above and preselects a save location.</p>
           </div>
         ` : ''}
-        ${repoWarning}
+        ${repoNote}
         <a href="${escapeHtml(hfUrl)}" target="_blank" rel="noopener noreferrer" class="huggingface-button small" title="Open on HuggingFace website" style="margin-top: 5px; display: inline-block;">
           View on HuggingFace <i class="fas fa-external-link-alt"></i>
         </a>
@@ -108,8 +137,7 @@ export function renderDownloadPreview(ui, data) {
       // whole-repo warning survives after a file has been picked.
       ui.modelUrlInput.dispatchEvent(new Event('input', { bubbles: true }));
     }
-    // Comfy-Org repos name their folders after the ComfyUI models/ subfolder
-    const folder = path.includes('/') ? path.split('/')[0] : null;
+    const folder = typeByPath.get(path);
     if (folder) await ui.autoSelectModelTypeFromHuggingFace(folder);
   });
 }

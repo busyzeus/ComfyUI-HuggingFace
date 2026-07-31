@@ -77,6 +77,58 @@ check("get_model_dir('other') when models/other exists",
 # A /blob/ URL is what the HuggingFace web UI puts on your clipboard. Losing the
 # filename here makes DownloadModel fall back to snapshot_download(), i.e. the
 # whole repo instead of the one file that was asked for.
+print("infer_model_type_from_path(): finds the model folder anywhere in the path")
+check("nested under a wrapper folder",
+      helpers.infer_model_type_from_path("split_files/text_encoders/qwen_3_4b_fp8_mixed.safetensors"),
+      "text_encoders")
+check("directly under the model folder",
+      helpers.infer_model_type_from_path("text_encoders/model.safetensors"), "text_encoders")
+check("most specific segment wins",
+      helpers.infer_model_type_from_path("text_encoders/clip_l/model.safetensors"), "text_encoders")
+check("aliases still normalize",
+      helpers.infer_model_type_from_path("split_files/lora/x.safetensors"), "loras")
+check("a file at the repo root has no hint",
+      helpers.infer_model_type_from_path("model.safetensors"), None)
+check("a path of unknown folders has no hint",
+      helpers.infer_model_type_from_path("split_files/misc/model.safetensors"), None)
+check("empty input", helpers.infer_model_type_from_path(""), None)
+# The folder name must not be taken from the filename itself
+check("filename is not treated as a folder",
+      helpers.infer_model_type_from_path("vae.safetensors"), None)
+
+print("plan_split_layout(): routes per file only when every weight has a home")
+check("z_image_turbo style layout routes per file",
+      helpers.plan_split_layout([
+          "README.md",
+          "z_image_convert_original_to_comfy.py",
+          "split_files/text_encoders/qwen_3_4b.safetensors",
+          "split_files/vae/ae.safetensors",
+          "split_files/loras/patch.safetensors",
+      ]),
+      {"split_files/text_encoders/qwen_3_4b.safetensors": "text_encoders",
+       "split_files/vae/ae.safetensors": "vae",
+       "split_files/loras/patch.safetensors": "loras"})
+check("a single-destination repo still routes per file",
+      helpers.plan_split_layout(["text_encoders/a.safetensors", "text_encoders/b.safetensors"]),
+      {"text_encoders/a.safetensors": "text_encoders",
+       "text_encoders/b.safetensors": "text_encoders"})
+# stabilityai/sdxl-turbo keeps loose weights at the root beside unet/ and vae/,
+# and has to be downloaded whole to stay usable.
+check("a diffusers repo is left intact",
+      helpers.plan_split_layout([
+          "sd_xl_turbo_1.0.safetensors",
+          "unet/diffusion_pytorch_model.safetensors",
+          "vae/diffusion_pytorch_model.safetensors",
+      ]),
+      None)
+check("an unrecognised folder blocks per-file routing",
+      helpers.plan_split_layout(["split_files/misc/a.safetensors"]), None)
+check("a repo with no weights is left intact",
+      helpers.plan_split_layout(["README.md", "config.json"]), None)
+check("non-weight files are never queued",
+      "config.json" in (helpers.plan_split_layout(
+          ["vae/a.safetensors", "vae/config.json"]) or {}), False)
+
 print("parse_huggingface_input(): single-file URLs keep their file path")
 check("blob URL", helpers.parse_huggingface_input(GEMMA_BLOB),
       ("Comfy-Org/gemma-4", GEMMA_FILE))

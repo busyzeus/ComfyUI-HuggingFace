@@ -84,16 +84,19 @@ check("a lone --- is not treated as frontmatter",
 
 print("_infer_model_type(): maps the repo layout onto a models/ subfolder")
 check("from the selected file",
-      details._infer_model_type([{"path": "vae/a.safetensors"}], "text_encoders/b.safetensors"),
+      details._infer_model_type([{"model_type": "vae"}], "text_encoders/b.safetensors"),
+      "text_encoders")
+check("from a nested selected file",
+      details._infer_model_type([], "split_files/text_encoders/b.safetensors"),
       "text_encoders")
 check("from a single shared folder",
-      details._infer_model_type([{"path": "text_encoders/a"}, {"path": "text_encoders/b"}], None),
+      details._infer_model_type([{"model_type": "text_encoders"}, {"model_type": "text_encoders"}], None),
       "text_encoders")
 check("ambiguous layout gives no hint",
-      details._infer_model_type([{"path": "vae/a"}, {"path": "text_encoders/b"}], None),
+      details._infer_model_type([{"model_type": "vae"}, {"model_type": "text_encoders"}], None),
       None)
 check("files at the repo root give no hint",
-      details._infer_model_type([{"path": "a.safetensors"}], None), None)
+      details._infer_model_type([{"model_type": None}], None), None)
 
 print(f"route: a single-file URL for {REPO}")
 result = call_route({"model_url_or_id": GEMMA_BLOB})
@@ -124,6 +127,29 @@ check("success", repo_result.get("success"), True)
 check("selected_file is None", repo_result.get("selected_file"), None)
 # Every weight lives under text_encoders/, so the hint still resolves
 check("model_type hint from layout", repo_result.get("model_type"), "text_encoders")
+
+Z_REPO = "Comfy-Org/z_image_turbo"
+Z_FILE = "split_files/text_encoders/qwen_3_4b_fp8_mixed.safetensors"
+
+print(f"route: {Z_REPO} nests weights under split_files/ and mixes destinations")
+z = call_route({"model_url_or_id": f"https://huggingface.co/{Z_REPO}/blob/main/{Z_FILE}"})
+check("success", z.get("success"), True)
+check("selected_file", z.get("selected_file"), Z_FILE)
+check("model_type sees past the split_files/ wrapper", z.get("model_type"), "text_encoders")
+
+z_files = {f["path"]: f["model_type"] for f in (z.get("files") or [])}
+check("per-file type: text encoder", z_files.get(Z_FILE), "text_encoders")
+check("per-file type: vae", z_files.get("split_files/vae/ae.safetensors"), "vae")
+check("per-file type: lora",
+      z_files.get("split_files/loras/z_image_turbo_distill_patch_lora_bf16.safetensors"), "loras")
+check("per-file type: diffusion model",
+      z_files.get("split_files/diffusion_models/z_image_turbo_bf16.safetensors"), "diffusion_models")
+check("the repo's .py helper script is not offered as a download",
+      any(p.endswith(".py") for p in z_files), False)
+
+print(f"route: the bare {Z_REPO} id cannot pick a destination")
+z_repo = call_route({"model_url_or_id": Z_REPO})
+check("no hint when files disagree", z_repo.get("model_type"), None)
 
 print("route: a repo that does not exist fails without raising")
 missing = call_route({"model_url_or_id": "Comfy-Org/definitely-not-a-real-repo-xyz"})

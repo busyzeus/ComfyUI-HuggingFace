@@ -108,6 +108,52 @@ def _normalize_model_type(model_type: str) -> str:
 
     return "other"
 
+# Extensions this downloader exists for. Anything else in a repo (scripts,
+# configs, licences) is noise in a "file to download" list.
+WEIGHT_EXTENSIONS = {
+    ".safetensors", ".sft", ".ckpt", ".pt", ".pth", ".bin", ".gguf", ".onnx", ".pkl",
+}
+
+def infer_model_type_from_path(file_path: str) -> Optional[str]:
+    """The ComfyUI models/ subfolder a repo path implies, or None.
+
+    Repos routinely nest weights under a wrapper directory, as in
+    split_files/text_encoders/qwen_3_4b_fp8_mixed.safetensors, so scan every
+    directory segment and take the most specific one that names a real model
+    folder. Looking only at the first segment would yield 'split_files'.
+    """
+    if not file_path:
+        return None
+    segments = [s for s in re.split(r'[\\/]+', str(file_path))[:-1] if s]
+    for segment in reversed(segments):
+        normalized = _normalize_model_type(segment)
+        # "other" is the unknown sentinel unless the segment really says "other"
+        if normalized == "other" and segment.lower() != "other":
+            continue
+        return normalized
+    return None
+
+def plan_split_layout(file_paths: List[str]) -> Optional[Dict[str, str]]:
+    """Map every weight file to its own models/ folder, or None.
+
+    Repos like Comfy-Org/z_image_turbo lay their weights out the way ComfyUI
+    wants them (split_files/text_encoders/..., split_files/vae/...), so
+    downloading the repo into one folder is always wrong - each file has its
+    own destination.
+
+    Returns None when the repo is not that shape, which covers diffusers repos
+    (stabilityai/sdxl-turbo keeps loose weights at the root next to unet/ and
+    vae/) and anything else that has to stay intact. Those still download whole.
+    """
+    weights = [p for p in file_paths
+               if os.path.splitext(p)[1].lower() in WEIGHT_EXTENSIONS]
+    if not weights:
+        return None
+    plan = {p: infer_model_type_from_path(p) for p in weights}
+    if any(dest is None for dest in plan.values()):
+        return None
+    return plan
+
 def _append_subdir(base_path: str, selected_subdir: str) -> str:
     """Append a user-selected subfolder, refusing to escape base_path."""
     if not selected_subdir:

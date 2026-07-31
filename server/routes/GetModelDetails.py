@@ -8,7 +8,10 @@ from aiohttp import web
 
 import server # ComfyUI server instance
 from ..utils import get_request_json, resolve_huggingface_api_key
-from ...utils.helpers import parse_huggingface_input, hf_ref_from_url
+from ...utils.helpers import (
+    parse_huggingface_input, hf_ref_from_url, infer_model_type_from_path,
+    plan_split_layout, WEIGHT_EXTENSIONS,
+)
 
 prompt_server = server.PromptServer.instance
 
@@ -52,17 +55,18 @@ def _fetch_description(model_id: str, ref: str, api_key) -> str:
 
 
 def _infer_model_type(files, selected_file):
-    """Guess the ComfyUI models/ subfolder from the repo layout.
+    """The save location to preselect, or None when the repo is ambiguous.
 
     HuggingFace has no equivalent of Civitai's model type, but Comfy-Org repos
-    put weights in a folder named after the ComfyUI folder they belong in
-    (text_encoders/, diffusion_models/, vae/, ...), which is a good enough hint
-    for pre-selecting the save location.
+    name their folders after the ComfyUI folder the weights belong in, which is
+    a good enough hint. A repo that mixes destinations - z_image_turbo ships
+    diffusion_models, loras, text_encoders and vae - gives no hint until a
+    specific file is chosen.
     """
-    if selected_file and "/" in selected_file:
-        return selected_file.split("/")[0]
-    folders = {f["path"].split("/")[0] for f in files if "/" in f["path"]}
-    return folders.pop() if len(folders) == 1 else None
+    if selected_file:
+        return infer_model_type_from_path(selected_file)
+    types = {f["model_type"] for f in files}
+    return types.pop() if len(types) == 1 else None
 
 
 @prompt_server.routes.post("/api/huggingface/get_model_details")
@@ -103,10 +107,17 @@ async def route_get_model_details(request):
                 "error": message,
             })
 
+        siblings = info.siblings or []
+        weights = [s for s in siblings
+                   if os.path.splitext(s.rfilename)[1].lower() in WEIGHT_EXTENSIONS]
+        # Fall back to everything-but-cruft for repos shipping no known weights
+        listed = weights or [s for s in siblings
+                             if os.path.basename(s.rfilename) not in _NON_MODEL_FILES]
         files = sorted(
-            ({"path": s.rfilename, "size": getattr(s, "size", None)}
-             for s in (info.siblings or [])
-             if os.path.basename(s.rfilename) not in _NON_MODEL_FILES),
+            ({"path": s.rfilename,
+              "size": getattr(s, "size", None),
+              "model_type": infer_model_type_from_path(s.rfilename)}
+             for s in listed),
             key=lambda f: f["path"],
         )
 
@@ -128,6 +139,9 @@ async def route_get_model_details(request):
             "files": files,
             "selected_file": parsed_filename,
             "model_type": _infer_model_type(files, parsed_filename),
+            # True when every weight belongs in a different models/ folder, so
+            # a single save location cannot be right for a whole-repo download.
+            "per_file_destinations": bool(plan_split_layout([s.rfilename for s in siblings])),
             "hf_url": f"https://huggingface.co/{parsed_model_id}",
             "stats": {
                 "downloads": getattr(info, "downloads", 0) or 0,

@@ -12,10 +12,61 @@ import server # ComfyUI server instance
 from ..utils import get_request_json, resolve_huggingface_api_key
 from ...downloader.manager import manager as download_manager
 from ...api.huggingface import HuggingFaceAPI
-from ...utils.helpers import get_model_dir, parse_huggingface_input, sanitize_filename, hf_ref_from_url
+from ...utils.helpers import (
+    get_model_dir, parse_huggingface_input, sanitize_filename, hf_ref_from_url,
+    plan_split_layout,
+)
 from ...config import METADATA_SUFFIX, PREVIEW_SUFFIX
 
 prompt_server = server.PromptServer.instance
+
+
+def _file_url(model_id: str, ref: str, file_path: str) -> str:
+    return (f"https://huggingface.co/{model_id}/resolve/"
+            f"{urllib.parse.quote(ref, safe='')}/{urllib.parse.quote(file_path)}")
+
+
+def _queue_split_layout(plan, *, model_url_or_id, model_id, ref, model_info,
+                        explicit_save_root, selected_subdir, num_connections,
+                        force_redownload, api_key):
+    """Queue one download per file, each into the folder its own path implies."""
+    queued, skipped = [], []
+    for file_path, dest_type in sorted(plan.items()):
+        target_dir = get_model_dir(dest_type, explicit_save_root, selected_subdir)
+        if not target_dir:
+            print(f"[HF Download] No directory for '{dest_type}', skipping {file_path}")
+            continue
+
+        filename = os.path.basename(file_path)
+        save_path = os.path.join(target_dir, filename)
+        if os.path.exists(save_path) and not force_redownload:
+            skipped.append(filename)
+            continue
+
+        url = _file_url(model_id, ref, file_path)
+        download_id = download_manager.add_to_queue({
+            "model_url_or_id": model_url_or_id,
+            "save_path": save_path,
+            "output_path": save_path,
+            "url": url,
+            "download_url": url,
+            "filename": filename,
+            "model_type": dest_type,
+            "huggingface_model_info": model_info,
+            "huggingface_filename": file_path,
+            "num_connections": num_connections,
+            "force_redownload": force_redownload,
+            "api_key": api_key,
+            "known_size": None,
+            "huggingface_version_info": {},
+            "huggingface_primary_file": None,
+            "thumbnail": None,
+            "custom_filename": "",
+            "huggingface_model_name": model_info.get("name"),
+        })
+        queued.append({"download_id": download_id, "filename": filename,
+                       "model_type": dest_type, "save_path": save_path})
+    return queued, skipped
 
 @prompt_server.routes.post("/api/huggingface/download")
 async def route_download_model(request):
@@ -83,6 +134,47 @@ async def route_download_model(request):
         
         print(f"[HF Download] Target file: {target_filename}")
 
+        ref_name = hf_ref_from_url(model_url_or_id)
+
+        # A repo laid out the way ComfyUI wants (split_files/text_encoders/...)
+        # has no single correct save location, so send each file to its own.
+        if target_filename is None:
+            plan = None
+            try:
+                from huggingface_hub import HfApi
+                repo_info = HfApi(token=resolved_api_key).model_info(
+                    target_model_id, revision=ref_name)
+                plan = plan_split_layout([s.rfilename for s in (repo_info.siblings or [])])
+            except Exception as e:
+                print(f"[HF Download] Could not inspect {target_model_id} for a split layout: {e}")
+
+            if plan:
+                print(f"[HF Download] Split layout: routing {len(plan)} files individually")
+                queued, skipped = _queue_split_layout(
+                    plan,
+                    model_url_or_id=model_url_or_id, model_id=target_model_id,
+                    ref=ref_name, model_info=model_info,
+                    explicit_save_root=explicit_save_root,
+                    selected_subdir=selected_subdir,
+                    num_connections=num_connections,
+                    force_redownload=force_redownload,
+                    api_key=resolved_api_key,
+                )
+                if not queued:
+                    raise web.HTTPBadRequest(
+                        reason=f"All {len(skipped)} files already exist. "
+                               f"Tick Force Re-download to replace them.")
+                return web.json_response({
+                    "status": "queued",
+                    "per_file_destinations": True,
+                    "queued": queued,
+                    "skipped": skipped,
+                    "huggingface_model_id": target_model_id,
+                    "details": {
+                        "filename": f"{len(queued)} files from {target_model_id}",
+                    },
+                })
+
         # Determine save directory
         target_dir = get_model_dir(model_type_value, explicit_save_root, selected_subdir)
         if not target_dir:
@@ -109,9 +201,7 @@ async def route_download_model(request):
             download_url = None
         else:
             # Keep the branch/commit the user pasted instead of assuming 'main'
-            ref = urllib.parse.quote(hf_ref_from_url(model_url_or_id), safe='')
-            download_url = (f"https://huggingface.co/{target_model_id}/resolve/"
-                            f"{ref}/{urllib.parse.quote(target_filename)}")
+            download_url = _file_url(target_model_id, ref_name, target_filename)
         
         download_info = {
             "model_url_or_id": model_url_or_id,

@@ -1,4 +1,5 @@
 import { HuggingFaceDownloaderAPI } from "../../api/huggingface.js";
+import { setSaveLocationEnabled } from "../previewRenderer.js";
 
 export function debounceFetchDownloadPreview(ui, delay = 500) {
     clearTimeout(ui.modelPreviewDebounceTimeout);
@@ -12,6 +13,7 @@ export async function fetchAndDisplayDownloadPreview(ui) {
 
     if (!modelUrlOrId) {
         ui.downloadPreviewArea.innerHTML = '';
+        setSaveLocationEnabled(ui, true);
         return;
     }
 
@@ -34,6 +36,7 @@ export async function fetchAndDisplayDownloadPreview(ui) {
         }
     } catch (error) {
         // Don't show scary error messages - just neutral info
+        setSaveLocationEnabled(ui, true);
         const message = 'Model details not available';
         console.info("Download Preview - details not available:", error);
         ui.downloadPreviewArea.innerHTML = `<p style="color: var(--input-text, #ccc);">${message}</p>`;

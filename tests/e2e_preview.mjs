@@ -28,7 +28,23 @@ const REPO = 'Comfy-Org/gemma-4';
 const TARGET = 'text_encoders/gemma4_e4b_it_fp8_scaled.safetensors';
 const TARGET_URL = `https://huggingface.co/${REPO}/blob/main/${TARGET}`;
 const EXPECTED_FILES = 4;
-const WARNING = 'whole repo downloads';
+// gemma-4 keeps every weight under text_encoders/, so it routes per file too
+const PER_FILE_NOTE = 'Save location is per file';
+const WHOLE_REPO_WARNING = 'whole repo downloads';
+
+// A diffusers repo: loose weights at the root beside unet/ and vae/, so it has
+// to download whole and the save location stays the user's choice.
+const INTACT_REPO = 'stabilityai/sdxl-turbo';
+
+// A repo that hides its weights one level down and sends them to three
+// different ComfyUI folders.
+const NESTED_REPO = 'Comfy-Org/z_image_turbo';
+const RESET_TYPE = 'checkpoints';
+const NESTED_CASES = {
+  'split_files/text_encoders/qwen_3_4b_fp8_mixed.safetensors': 'text_encoders',
+  'split_files/vae/ae.safetensors': 'vae',
+  'split_files/diffusion_models/z_image_turbo_bf16.safetensors': 'diffusion_models',
+};
 
 async function loadPlaywright() {
   try {
@@ -99,8 +115,12 @@ try {
   const options = await picker.locator('option').allTextContents();
   check('target file is listed with its size',
     options.some(o => o.includes(TARGET) && o.includes('8.44 GB')), true);
-  check('whole-repo cost is stated up front',
-    (await area.innerText()).includes(WARNING), true);
+  check('per-file routing is announced',
+    (await area.innerText()).includes(PER_FILE_NOTE), true);
+  check('save location is disabled while routing per file',
+    await page.locator('#huggingface-model-type').isDisabled(), true);
+  check('subfolder is disabled too',
+    await page.locator('#huggingface-subdir-select').isDisabled(), true);
 
   console.log('Preview: picking a file rewrites the form');
   await picker.selectOption(TARGET);
@@ -114,9 +134,35 @@ try {
       .endsWith(path.join('models', 'text_encoders')), true);
   // The panel must re-render, or it keeps warning about a 55 GB download that
   // is no longer what the form would do.
-  check('whole-repo warning cleared', (await area.innerText()).includes(WARNING), false);
+  check('per-file note cleared', (await area.innerText()).includes(PER_FILE_NOTE), false);
+  check('save location re-enabled once a file is chosen',
+    await page.locator('#huggingface-model-type').isDisabled(), false);
   check('picker still shows the chosen file',
     await page.locator('#huggingface-file-picker').inputValue(), TARGET);
+
+  // Pasting a file URL alone must pick the save location, with no dropdown
+  // interaction, even when the repo nests weights under a wrapper folder.
+  console.log('Preview: a pasted file URL preselects the save location on its own');
+  const typeSelect = page.locator('#huggingface-model-type');
+  for (const [file, expected] of Object.entries(NESTED_CASES)) {
+    // Reset first, or a case that never switches inherits the previous answer
+    // and reads as a pass.
+    await typeSelect.selectOption(RESET_TYPE);
+    await page.waitForTimeout(500);
+    await urlInput.fill(`https://huggingface.co/${NESTED_REPO}/blob/main/${file}`);
+    await page.waitForTimeout(6000);
+    check(`${file} -> ${expected}`, await typeSelect.inputValue(), expected);
+  }
+
+  console.log(`Preview: ${INTACT_REPO} must keep the save location under user control`);
+  await urlInput.fill(INTACT_REPO);
+  await page.waitForTimeout(8000);
+  check('save location stays enabled',
+    await page.locator('#huggingface-model-type').isDisabled(), false);
+  check('warned that the whole repo downloads',
+    (await area.innerText()).includes(WHOLE_REPO_WARNING), true);
+  check('not announced as per-file',
+    (await area.innerText()).includes(PER_FILE_NOTE), false);
 
   await page.screenshot({ path: SHOT, fullPage: true });
   console.log(`\nscreenshot: ${SHOT}`);
