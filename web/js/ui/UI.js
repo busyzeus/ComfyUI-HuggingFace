@@ -125,7 +125,6 @@ export class HuggingFaceDownloaderUI {
     async initializeUI() {
         console.info("[HuggingFace] Initializing UI components...");
         await this.populateModelTypes();
-        await this.populateBaseModels();
         this.loadAndApplySettings();
         await this.loadGlobalRootSetting();
         if (this.downloadModelTypeSelect) {
