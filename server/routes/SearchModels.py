@@ -1,121 +1,126 @@
 # ================================================
 # File: server/routes/SearchModels.py
 # ================================================
-import json
 import traceback
+from itertools import islice
 from aiohttp import web
 
-import server # ComfyUI server instance
+import server  # ComfyUI server instance
 from ..utils import get_request_json, resolve_huggingface_api_key
-from ...config import HUGGINGFACE_API_TYPE_MAP
 
 prompt_server = server.PromptServer.instance
 
+# Each category maps to exactly one HuggingFace filter tag. There is deliberately
+# no task category: Comfy-Org repos leave pipeline_tag empty, so filtering by
+# task hides the repos this downloader exists for.
+CATEGORY_FILTERS = {
+    "any": None,
+    "lora": "lora",
+    "gguf": "gguf",
+    "diffusers": "diffusers",
+}
+
+# huggingface_hub rejects any other sort value with BadRequestError
+SORT_VALUES = {
+    "Most Downloaded": "downloads",
+    "Trending": "trendingScore",
+    "Most Liked": "likes",
+    "Recently Updated": "lastModified",
+    "Newest": "createdAt",
+}
+
+COMFYUI_TAG = "comfyui"
+DEFAULT_SORT = "downloads"
+MAX_LIMIT = 100
+
+
+def build_filters(category, comfyui_only):
+    """The `filter` argument for list_models. The API ANDs the entries."""
+    filters = []
+    if comfyui_only:
+        filters.append(COMFYUI_TAG)
+    category_filter = CATEGORY_FILTERS.get((category or "any").strip().lower())
+    if category_filter:
+        filters.append(category_filter)
+    return filters
+
+
+def format_model(model):
+    """One search result, in the shape searchRenderer.js consumes."""
+    owner = model.id.split("/")[0]
+    last_modified = getattr(model, "last_modified", None)
+    return {
+        "id": model.id,
+        "name": model.id.split("/")[-1],
+        "author": getattr(model, "author", None) or owner,
+        "downloads": getattr(model, "downloads", 0) or 0,
+        "likes": getattr(model, "likes", 0) or 0,
+        "tags": [t for t in (getattr(model, "tags", None) or []) if ":" not in t],
+        "updated": last_modified.isoformat() if last_modified else "",
+        "gated": bool(getattr(model, "gated", False)),
+    }
+
+
 @prompt_server.routes.post("/api/huggingface/search")
 async def route_search_models(request):
-    """API Endpoint for searching models using huggingface_hub."""
+    """API Endpoint for searching models on HuggingFace."""
     try:
         data = await get_request_json(request)
 
-        query = data.get("query", "").strip()
-        model_type_keys = data.get("model_types", []) # e.g., ["lora", "checkpoint"]
-        base_model_filters = data.get("base_models", []) # e.g., ["SD 1.5", "Pony"]
-        sort = data.get("sort", "Most Downloaded")
-        limit = int(data.get("limit", 20))
-        page = int(data.get("page", 1))
+        query = (data.get("query") or "").strip()
+        category = data.get("category") or "any"
+        comfyui_only = bool(data.get("comfyui_only", True))
+        sort_label = data.get("sort") or "Most Downloaded"
+        limit = max(1, min(MAX_LIMIT, int(data.get("limit", 20))))
+        page = max(1, int(data.get("page", 1)))
         resolved_api_key = resolve_huggingface_api_key(data)
-        nsfw = data.get("nsfw", True)  # Default to True (enabled)
 
-        if not query and not model_type_keys and not base_model_filters:
-             raise web.HTTPBadRequest(reason="Search requires a query or at least one filter (type or base model).")
+        filters = build_filters(category, comfyui_only)
+        if not query and not filters:
+            raise web.HTTPBadRequest(
+                reason="Search needs a query, a category, or ComfyUI only.")
 
-        # Use huggingface_hub for search
         try:
             from huggingface_hub import HfApi
-            hf_api = HfApi(token=resolved_api_key)
-            
-            # Prepare search parameters
-            search_params = {
-                "limit": limit
+            api = HfApi(token=resolved_api_key)
+
+            kwargs = {
+                "sort": SORT_VALUES.get(sort_label, DEFAULT_SORT),
+                "direction": -1,
+                # Without full=True, author and last_modified come back None
+                "full": True,
             }
-            
-            # Map sort values to valid huggingface_hub values
-            sort_mapping = {
-                "Most Downloaded": "downloads",
-                "Most Liked": "likes", 
-                "Newest": "created_at",
-                "Relevancy": None,  # Remove sort for relevancy (default)
-                "Alphabetical": "modelId"
-            }
-            
-            sort_value = sort_mapping.get(sort, None)
-            if sort_value:
-                search_params["sort"] = sort_value
-            
             if query:
-                search_params["search"] = query
-            
-            # Map model types to tags
-            if model_type_keys:
-                tags = []
-                for key in model_type_keys:
-                    api_type = HUGGINGFACE_API_TYPE_MAP.get(key.lower())
-                    if api_type:
-                        tags.append(api_type.lower())
-                if tags:
-                    search_params["tags"] = tags
-            
-            # Add base model filters as part of query if specified
-            if base_model_filters:
-                base_model_query = " ".join([f'base_model:{bm}' for bm in base_model_filters])
-                if query:
-                    search_params["search"] = f"{query} {base_model_query}"
-                else:
-                    search_params["search"] = base_model_query
-            
-            print(f"[Server Search] huggingface_hub: search='{search_params.get('search', '<none>')}', tags={search_params.get('tags', 'Any')}, sort={sort}, limit={limit}")
-            
-            # Perform search
-            models = hf_api.list_models(**search_params)
-            
-            # Format results for frontend
-            formatted_models = []
-            for model in models:
-                formatted_model = {
-                    "id": model.id,
-                    "name": model.id.split('/')[-1],
-                    "description": model.tags or "",
-                    "creator": {"username": model.author or ""},
-                    "modelId": model.id,
-                    "downloads": model.downloads or 0,
-                    "likes": model.likes or 0,
-                    "tags": model.tags or [],
-                    "modelType": "Unknown",  # Will be determined by frontend
-                    "baseModel": [],  # Will be determined by frontend
-                    "stats": {
-                        "downloadCount": model.downloads or 0,
-                        "thumbsUpCount": model.likes or 0
-                    }
-                }
-                formatted_models.append(formatted_model)
-            
-            response_data = {
-                "items": formatted_models,
-                "metadata": {
-                    "currentPage": page,
-                    "pageSize": limit,
-                    "totalItems": len(formatted_models),
-                    "totalPages": 1  # huggingface_hub doesn't provide pagination info
-                }
-            }
-            
-            return web.json_response(response_data)
-            
+                kwargs["search"] = query
+            if filters:
+                kwargs["filter"] = filters
+
+            print(f"[Server Search] query={query!r} filters={filters} "
+                  f"sort={kwargs['sort']} page={page} limit={limit}")
+
+            # list_models has no offset, but it pages lazily, so islice only
+            # walks as far as the requested page. Taking one extra item is how
+            # we learn whether a next page exists without a count endpoint.
+            offset = (page - 1) * limit
+            window = list(islice(api.list_models(**kwargs), offset, offset + limit + 1))
         except Exception as e:
-            print(f"[Server Search] huggingface_hub search failed: {e}")
-            return web.json_response({"error": "Search failed", "details": str(e)}, status=500)
-            
+            print(f"[Server Search] list_models failed: {e}")
+            return web.json_response(
+                {"error": "Search failed", "details": str(e)}, status=500)
+
+        return web.json_response({
+            "items": [format_model(m) for m in window[:limit]],
+            "metadata": {
+                "page": page,
+                "limit": limit,
+                "has_more": len(window) > limit,
+            },
+        })
+
+    except web.HTTPException:
+        raise
     except Exception as e:
         print(f"Error in search_models: {e}")
         traceback.print_exc()
-        return web.json_response({"error": "Internal Server Error", "details": str(e)}, status=500)
+        return web.json_response(
+            {"error": "Internal Server Error", "details": str(e)}, status=500)
