@@ -104,6 +104,9 @@ export function renderDownloadPreview(ui, data) {
     const path = picker.value;
     if (ui.modelUrlInput) {
       ui.modelUrlInput.value = path ? fileUrl(path) : hfUrl;
+      // Re-render off the new URL so the panel keeps matching it - otherwise the
+      // whole-repo warning survives after a file has been picked.
+      ui.modelUrlInput.dispatchEvent(new Event('input', { bubbles: true }));
     }
     // Comfy-Org repos name their folders after the ComfyUI models/ subfolder
     const folder = path.includes('/') ? path.split('/')[0] : null;
