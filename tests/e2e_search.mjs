@@ -88,20 +88,28 @@ try {
   const firstCount = await rows.count();
   check('results rendered', firstCount > 0, true);
 
-  const firstText = await rows.first().innerText();
-  check('a row shows a download count', /[\d,]+/.test(firstText), true);
+  const downloadsText = await rows.first().locator('[title="Downloads"]').innerText();
+  const downloadsCount = Number(downloadsText.replace(/\D/g, ''));
+  check('first row shows a nonzero download count', downloadsCount > 0, true);
   check('every row can be opened',
     await page.locator('.huggingface-search-open-button').count(), firstCount);
 
   console.log('Load more appends rather than replacing');
   const loadMore = page.locator('#huggingface-search-load-more');
-  if (await loadMore.isVisible()) {
+  const loadMoreVisible = await loadMore.isVisible();
+  check('load more button is visible ("flux" + ComfyUI only spans more than one page of 20)',
+    loadMoreVisible, true);
+
+  let grew = false;
+  if (loadMoreVisible) {
     await loadMore.click();
-    await page.waitForTimeout(6000);
-    check('more rows than before', (await rows.count()) > firstCount, true);
-  } else {
-    console.log('  (skipped: only one page of results)');
+    const deadline = Date.now() + 45000;
+    while (Date.now() < deadline) {
+      if ((await rows.count()) > firstCount) { grew = true; break; }
+      await page.waitForTimeout(300);
+    }
   }
+  check('more rows than before', grew, true);
 
   console.log('A result hands off to the Download tab');
   const targetId = await page.locator('.huggingface-search-open-button').first()
