@@ -1,6 +1,7 @@
 # ================================================
 # File: server/routes/GetModelDetails.py
 # ================================================
+import asyncio
 import os
 import re
 import traceback
@@ -89,8 +90,12 @@ async def route_get_model_details(request):
 
         try:
             from huggingface_hub import HfApi
-            info = HfApi(token=resolved_api_key).model_info(
-                parsed_model_id, revision=ref, files_metadata=True)
+            # model_info is synchronous and requests-backed. Called directly it
+            # would stall ComfyUI's whole event loop - server, websocket and
+            # prompt dispatch - for the length of the round trip.
+            info = await asyncio.to_thread(
+                lambda: HfApi(token=resolved_api_key).model_info(
+                    parsed_model_id, revision=ref, files_metadata=True))
         except Exception as e:
             print(f"[GetModelDetails] model_info failed for {parsed_model_id}: {e}")
             # HuggingFace answers 401 for both private and non-existent repos,
@@ -121,6 +126,10 @@ async def route_get_model_details(request):
             key=lambda f: f["path"],
         )
 
+        # Also a blocking requests call - same treatment as model_info above
+        description = await asyncio.to_thread(
+            _fetch_description, parsed_model_id, ref, resolved_api_key)
+
         card_data = getattr(info, "cardData", None) or {}
         base_model = card_data.get("base_model") or []
         if isinstance(base_model, str):
@@ -131,7 +140,7 @@ async def route_get_model_details(request):
             "model_id": parsed_model_id,
             "model_name": parsed_model_id.split("/")[-1],
             "creator_username": getattr(info, "author", None) or parsed_model_id.split("/")[0],
-            "description": _fetch_description(parsed_model_id, ref, resolved_api_key),
+            "description": description,
             "license": card_data.get("license") or "Unknown",
             "tags": [t for t in (getattr(info, "tags", None) or []) if ":" not in t],
             "base_model": base_model,
