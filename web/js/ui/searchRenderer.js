@@ -75,17 +75,15 @@ export function renderSearchResults(ui, items) {
     });
 
     let versionButtonsHtml = visibleVersions.map(version => {
-      const versionId = version.id;
       const versionName = version.name || 'Unknown Version';
       const baseModel = version.baseModel || 'N/A';
       return `
         <button class="huggingface-button primary small huggingface-search-download-button"
                 data-model-id="${baseRepoId}"
-                data-version-id="${versionId || ''}"
                 data-model-type="${modelTypeApi || ''}"
                 data-creator="${creator}"
                 data-model-name="${modelName}"
-                title="${!versionId ? 'Download latest version' : 'Pre-fill Download Tab'}" >
+                title="Pre-fill Download Tab" >
           <span class="base-model-badge">${baseModel}</span> ${versionName} <i class="fas fa-download"></i>
         </button>
       `;
@@ -108,17 +106,15 @@ export function renderSearchResults(ui, items) {
       allVersionsHtml = `
         <div class="all-versions-container" id="all-versions-${modelId}" style="display: none;">
           ${hiddenVersions.map(version => {
-            const versionId = version.id;
             const versionName = version.name || 'Unknown Version';
             const baseModel = version.baseModel || 'N/A';
             return `
               <button class="huggingface-button primary small huggingface-search-download-button"
                       data-model-id="${baseRepoId}"
-                      data-version-id="${versionId || ''}"
                       data-model-type="${modelTypeApi || ''}"
                       data-creator="${creator}"
                       data-model-name="${modelName}"
-                      title="${!versionId ? 'Download latest version' : 'Pre-fill Download Tab'}" >
+                      title="Pre-fill Download Tab" >
                 <span class="base-model-badge">${baseModel}</span> ${versionName} <i class="fas fa-download"></i>
               </button>
             `;
@@ -175,7 +171,7 @@ export function renderSearchResults(ui, items) {
         ` : ''}
       </div>
       <div class="huggingface-search-actions">
-        <a href="https://huggingface.co/${baseRepoId}${primaryVersionId ? '?modelVersionId='+primaryVersionId : ''}" 
+        <a href="https://huggingface.co/${baseRepoId}"
            target="_blank" rel="noopener noreferrer" class="huggingface-button small" 
            title="Open on HuggingFace website">
           View <i class="fas fa-external-link-alt"></i>

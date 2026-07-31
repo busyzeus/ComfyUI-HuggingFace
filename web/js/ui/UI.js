@@ -60,7 +60,6 @@ export class HuggingFaceDownloaderUI {
         this.downloadForm = this.modal.querySelector('#huggingface-download-form');
         this.downloadPreviewArea = this.modal.querySelector('#huggingface-download-preview-area');
         this.modelUrlInput = this.modal.querySelector('#huggingface-model-url');
-        this.modelVersionIdInput = this.modal.querySelector('#huggingface-model-version-id');
         this.downloadModelTypeSelect = this.modal.querySelector('#huggingface-model-type');
         this.createModelTypeButton = this.modal.querySelector('#huggingface-create-model-type');
         this.customFilenameInput = this.modal.querySelector('#huggingface-custom-filename');

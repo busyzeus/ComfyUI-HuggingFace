@@ -92,7 +92,6 @@ export function setupEventListeners(ui) {
     // Download form inputs
     ui.modelUrlInput.addEventListener('input', () => ui.debounceFetchDownloadPreview());
     ui.modelUrlInput.addEventListener('paste', () => ui.debounceFetchDownloadPreview(0));
-    ui.modelVersionIdInput.addEventListener('blur', () => ui.fetchAndDisplayDownloadPreview());
 
     // --- DYNAMIC CONTENT LISTENERS (Event Delegation) ---
 
@@ -190,7 +189,7 @@ export function setupEventListeners(ui) {
         const downloadButton = event.target.closest('.huggingface-search-download-button');
         if (downloadButton) {
             event.preventDefault();
-            const { modelId, versionId, modelType, creator, modelName } = downloadButton.dataset;
+            const { modelId, modelType, creator, modelName } = downloadButton.dataset;
             if (!modelId) {
                 ui.showToast("Error: Missing model ID for download.", "error");
                 return;
@@ -198,7 +197,6 @@ export function setupEventListeners(ui) {
             const modelTypeInternalKey = Object.keys(ui.modelTypes).find(key => ui.modelTypes[key]?.toLowerCase() === modelType?.toLowerCase()) || ui.settings.defaultModelType;
 
             ui.modelUrlInput.value = modelId;
-            ui.modelVersionIdInput.value = versionId;
             ui.customFilenameInput.value = modelName ? `${modelName.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
             ui.forceRedownloadCheckbox.checked = false;
             ui.downloadModelTypeSelect.value = modelTypeInternalKey;

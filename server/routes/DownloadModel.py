@@ -131,7 +131,6 @@ async def route_download_model(request):
             "huggingface_version_info": {},
             "huggingface_primary_file": None,
             "thumbnail": None,
-            "model_version_id": None,
             "custom_filename": custom_filename_input,
             "huggingface_model_name": model_info.get("name", target_model_id.split('/')[-1])
         }

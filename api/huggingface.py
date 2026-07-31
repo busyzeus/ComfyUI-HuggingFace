@@ -173,12 +173,6 @@ class HuggingFaceAPI:
         print(f"[HuggingFace API] Skipping model info, using huggingface_hub auto-detect for {model_id}")
         return {"id": model_id, "name": model_id.split('/')[-1]}
 
-    def get_model_version_info(self, version_id: str) -> Optional[Dict[str, Any]]:
-        """Gets version information - not applicable for HuggingFace, returns empty dict"""
-        # HuggingFace doesn't have version IDs like Civitai
-        # This method is kept for compatibility but returns empty
-        return {}
-
     def download_file(self, model_id: str, filename: str, local_dir: str = None) -> Optional[Union[requests.Response, str]]:
         """Downloads a specific file from HuggingFace. Uses only huggingface_hub."""
         if not HF_HUB_AVAILABLE:

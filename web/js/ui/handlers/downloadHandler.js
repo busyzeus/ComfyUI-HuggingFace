@@ -9,7 +9,6 @@ export function debounceFetchDownloadPreview(ui, delay = 500) {
 
 export async function fetchAndDisplayDownloadPreview(ui) {
     const modelUrlOrId = ui.modelUrlInput.value.trim();
-    const versionId = ui.modelVersionIdInput.value.trim();
 
     if (!modelUrlOrId) {
         ui.downloadPreviewArea.innerHTML = '';
@@ -21,22 +20,17 @@ export async function fetchAndDisplayDownloadPreview(ui) {
 
     const params = {
         model_url_or_id: modelUrlOrId,
-        model_version_id: versionId ? parseInt(versionId, 10) : null,
         api_key: ui.settings.apiKey
     };
 
     try {
         const result = await HuggingFaceDownloaderAPI.getModelDetails(params);
-        if (result && result.success) {
-            ui.renderDownloadPreview(result);
-            // Auto-select model type save location based on HuggingFace model type
-            if (result.model_type) {
-                await ui.autoSelectModelTypeFromHuggingFace(result.model_type);
-            }
-        } else {
-            // Don't show error for missing details - just show neutral message
-            const message = result.details || result.error || 'Model details not available';
-            ui.downloadPreviewArea.innerHTML = `<p style="color: var(--input-text, #ccc);">${message}</p>`;
+        // renderDownloadPreview also renders the "no details" case, and escapes
+        // anything the repo supplied on the way in.
+        ui.renderDownloadPreview(result);
+        // Preselect the save location from the repo's folder layout
+        if (result?.success && result.model_type) {
+            await ui.autoSelectModelTypeFromHuggingFace(result.model_type);
         }
     } catch (error) {
         // Don't show scary error messages - just neutral info
@@ -65,19 +59,12 @@ export async function handleDownloadSubmit(ui) {
     const params = {
         model_url_or_id: modelUrlOrId,
         model_type: ui.downloadModelTypeSelect.value,
-        model_version_id: ui.modelVersionIdInput.value ? parseInt(ui.modelVersionIdInput.value, 10) : null,
         custom_filename: userFilename,
         subdir: selectedSubdir,
         num_connections: parseInt(ui.downloadConnectionsInput.value, 10),
         force_redownload: ui.forceRedownloadCheckbox.checked,
         api_key: ui.settings.apiKey
     };
-
-    const fileSelectEl = ui.modal.querySelector('#huggingface-file-select');
-    if (fileSelectEl && fileSelectEl.value) {
-        const fid = parseInt(fileSelectEl.value, 10);
-        if (!Number.isNaN(fid)) params.file_id = fid;
-    }
 
     try {
         const result = await HuggingFaceDownloaderAPI.downloadModel(params);

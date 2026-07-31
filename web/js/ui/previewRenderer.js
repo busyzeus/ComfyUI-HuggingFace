@@ -1,96 +1,112 @@
 // Renders the download preview panel
 
-const PLACEHOLDER_IMAGE_URL = `/extensions/ComfyUI-HuggingFace/images/placeholder.jpg`;
+const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
+// Model card text and filenames come from an arbitrary repo, so they are never
+// injected as HTML.
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ESCAPES[ch]);
+}
 
 export function renderDownloadPreview(ui, data) {
   if (!ui.downloadPreviewArea) return;
   ui.ensureFontAwesome();
 
-  const modelId = data.model_id;
-  const modelName = data.model_name || 'Untitled Model';
-  const creator = data.creator_username || 'Unknown Creator';
-  const modelType = data.model_type || 'N/A';
-  const versionName = data.version_name || 'N/A';
-  const baseModel = data.base_model || 'N/A';
-  const stats = data.stats || {};
-  const descriptionHtml = data.description_html || '<p><em>No description.</em></p>';
-  const version_description_html = data.version_description_html || '<p><em>No description.</em></p>';
-  const fileInfo = data.file_info || {};
+  if (!data || data.success === false) {
+    const message = data?.error || 'Model details not available';
+    ui.downloadPreviewArea.innerHTML =
+      `<p style="color: var(--input-text, #ccc);">${escapeHtml(message)}</p>`;
+    return;
+  }
+
+  const modelId = data.model_id || '';
+  const revision = data.revision || 'main';
   const files = Array.isArray(data.files) ? data.files : [];
-  const thumbnail = data.thumbnail_url || PLACEHOLDER_IMAGE_URL;
-  const nsfwLevel = Number(data.nsfw_level ?? 0);
-  const blurMinLevel = Number(ui.settings?.nsfwBlurMinLevel ?? 4);
-  const shouldBlur = ui.settings?.hideMatureInSearch === true && nsfwLevel >= blurMinLevel;
-  const huggingfaceLink = `https://huggingface.com/models/${modelId}${data.version_id ? '?modelVersionId=' + data.version_id : ''}`;
+  const tags = Array.isArray(data.tags) ? data.tags : [];
+  const baseModel = Array.isArray(data.base_model) ? data.base_model : [];
+  const stats = data.stats || {};
+  const selectedFile = data.selected_file || '';
+  const hfUrl = data.hf_url || `https://huggingface.co/${modelId}`;
+  const modified = (stats.modified_at || '').slice(0, 10);
 
-  const onErrorScript = `this.onerror=null; this.src='${PLACEHOLDER_IMAGE_URL}'; this.style.backgroundColor='#444';`;
+  const fileUrl = (path) =>
+    `https://huggingface.co/${modelId}/blob/${encodeURIComponent(revision)}/` +
+    path.split('/').map(encodeURIComponent).join('/');
 
-  const overlayHtml = shouldBlur ? `<div class="huggingface-nsfw-overlay" title="R-rated: click to reveal">R</div>` : '';
-  const containerClasses = `huggingface-thumbnail-container${shouldBlur ? ' blurred' : ''}`;
+  const sizeOf = (file) =>
+    typeof file.size === 'number' ? ui.formatBytes(file.size) : 'size unknown';
 
-  const previewHtml = `
-    <div class="huggingface-search-item" style="background-color: var(--comfy-input-bg);">
-      <div class="${containerClasses}" data-nsfw-level="${Number.isFinite(nsfwLevel) ? nsfwLevel : ''}">
-        <img src="${thumbnail}" alt="${modelName} thumbnail" class="huggingface-search-thumbnail" loading="lazy" onerror="${onErrorScript}">
-        ${overlayHtml}
-        <div class="huggingface-type-badge">${modelType}</div>
-      </div>
+  const totalSize = files.reduce((sum, f) => sum + (f.size || 0), 0);
+
+  const badge = (text) =>
+    `<span class="base-model-badge" style="margin-right: 5px;">${escapeHtml(text)}</span>`;
+
+  const fileOptions = files.map(f => {
+    const selected = f.path === selectedFile ? ' selected' : '';
+    return `<option value="${escapeHtml(f.path)}"${selected}>${escapeHtml(f.path)} • ${sizeOf(f)}</option>`;
+  }).join('');
+
+  // Whole-repo downloads are a real footgun on repos that ship several
+  // variants of the same weights, so say how much that would actually cost.
+  const repoWarning = (!selectedFile && files.length > 1)
+    ? `<p style="font-size: 0.9em; color: #e0a030; margin-top: 8px;">
+         <i class="fas fa-exclamation-triangle"></i>
+         No file selected, so the whole repo downloads: ${files.length} files, ${ui.formatBytes(totalSize)}.
+       </p>`
+    : '';
+
+  ui.downloadPreviewArea.innerHTML = `
+    <div class="huggingface-search-item" style="background-color: var(--comfy-input-bg); padding: 10px;">
       <div class="huggingface-search-info">
-        <h4>${modelName} <span style="font-weight: normal; font-size: 0.9em;">by ${creator}</span></h4>
-        <p style="font-weight: bold;">Version: ${versionName} <span class="base-model-badge" style="margin-left: 5px;">${baseModel}</span></p>
-        <div class="huggingface-search-stats" title="Stats: Downloads / Rating (Count) / Likes">
-          <span title="Downloads"><i class="fas fa-download"></i> ${stats.downloads?.toLocaleString() || 0}</span>
-          <span title="Likes"><i class="fas fa-thumbs-up"></i> ${stats.likes?.toLocaleString(0) || 0}</span>
-          <span title="Dislikes"><i class="fas fa-thumbs-down"></i> ${stats.dislikes?.toLocaleString() || 0}</span>
-          <span title="Buzz"><i class="fas fa-bolt"></i> ${stats.buzz?.toLocaleString() || 0}</span>
-        </div>
-        <p style="font-weight: bold; margin-top: 10px;">Primary File:</p>
+        <h4>${escapeHtml(data.model_name || modelId)}
+          <span style="font-weight: normal; font-size: 0.9em;">by ${escapeHtml(data.creator_username || 'Unknown')}</span>
+        </h4>
         <p style="font-size: 0.9em; color: #ccc;">
-          Name: ${fileInfo.name || 'N/A'}<br>
-          Size: ${ui.formatBytes(fileInfo.size_kb * 1024) || 'N/A'} <br>
-          Format: ${fileInfo.format || 'N/A'}<br>
-          Precision: ${fileInfo.precision || 'N/A'}<br>
-          Model Size: ${fileInfo.model_size || 'N/A'}
+          ${badge(data.license || 'Unknown')}
+          ${baseModel.map(badge).join('')}
+          ${modified ? `Updated ${escapeHtml(modified)}` : ''}
         </p>
+        <div class="huggingface-search-stats" title="Downloads / Likes">
+          <span title="Downloads"><i class="fas fa-download"></i> ${(stats.downloads || 0).toLocaleString()}</span>
+          <span title="Likes"><i class="fas fa-heart"></i> ${(stats.likes || 0).toLocaleString()}</span>
+          <span title="Files"><i class="fas fa-file"></i> ${files.length} files • ${ui.formatBytes(totalSize)}</span>
+        </div>
         ${files.length > 0 ? `
-          <div class=\"huggingface-form-group\" style=\"margin-top: 10px;\">
-            <label for=\"huggingface-file-select\">Choose File (optional)</label>
-            <select id=\"huggingface-file-select\" class=\"huggingface-select\">
-              <option value=\"\">Auto (primary/best)</option>
-              ${files.map(f => {
-                const id = f.id ?? '';
-                const name = (f.name || '').replace(/</g,'&lt;');
-                const fmt = f.format || 'N/A';
-                const prec = (f.precision || '').toUpperCase();
-                const msize = f.model_size || '';
-                const size = (typeof f.size_kb === 'number') ? ui.formatBytes(f.size_kb * 1024) : 'N/A';
-                const disabled = f.downloadable ? '' : 'disabled';
-                const title = f.downloadable ? '' : ' (not downloadable)';
-                const extras = [prec, msize].filter(Boolean).join(' • ');
-                return `<option value=\"${id}\" ${disabled}>#${id} • ${name} • ${fmt}${extras ? ' • ' + extras : ''} • ${size}${title}</option>`;
-              }).join('')}
+          <div class="huggingface-form-group" style="margin-top: 10px;">
+            <label for="huggingface-file-picker">File to download</label>
+            <select id="huggingface-file-picker" class="huggingface-select">
+              <option value="">Entire repo (${files.length} files, ${ui.formatBytes(totalSize)})</option>
+              ${fileOptions}
             </select>
-            <p style=\"font-size: 0.9em; color: #aaa; margin-top: 6px;\">Pick other variants when available.</p>
+            <p style="font-size: 0.9em; color: #aaa; margin-top: 6px;">Picking a file rewrites the URL above and preselects a save location.</p>
           </div>
         ` : ''}
-        <a href="${huggingfaceLink}" target="_blank" rel="noopener noreferrer" class="huggingface-button small" title="Open on HuggingFace website" style="margin-top: 5px; display: inline-block;">
+        ${repoWarning}
+        <a href="${escapeHtml(hfUrl)}" target="_blank" rel="noopener noreferrer" class="huggingface-button small" title="Open on HuggingFace website" style="margin-top: 5px; display: inline-block;">
           View on HuggingFace <i class="fas fa-external-link-alt"></i>
         </a>
       </div>
     </div>
-    <div style="margin-top: 15px;">
-      <h5 style="margin-bottom: 5px;">Model Description:</h5>
-      <div class="model-description-content" style="max-height: 200px; overflow-y: auto; background-color: var(--comfy-input-bg); padding: 10px; border-radius: 4px; font-size: 0.9em; border: 1px solid var(--border-color, #555);">
-        ${descriptionHtml}
-      </div>
-    </div>
-    <div style="margin-top: 15px;">
-      <h5 style="margin-bottom: 5px;">Version Description:</h5>
-      <div class="model-description-content" style="max-height: 200px; overflow-y: auto; background-color: var(--comfy-input-bg); padding: 10px; border-radius: 4px; font-size: 0.9em; border: 1px solid var(--border-color, #555);">
-        ${version_description_html}
-      </div>
-    </div>
+    ${tags.length ? `
+      <div style="margin-top: 10px; font-size: 0.85em; color: #aaa;">
+        ${tags.map(t => escapeHtml(t)).join(' · ')}
+      </div>` : ''}
+    ${data.description ? `
+      <div style="margin-top: 15px;">
+        <h5 style="margin-bottom: 5px;">Model Card:</h5>
+        <div class="model-description-content" style="max-height: 200px; overflow-y: auto; background-color: var(--comfy-input-bg); padding: 10px; border-radius: 4px; font-size: 0.9em; border: 1px solid var(--border-color, #555); white-space: pre-wrap;">${escapeHtml(data.description)}</div>
+      </div>` : ''}
   `;
 
-  ui.downloadPreviewArea.innerHTML = previewHtml;
+  const picker = ui.downloadPreviewArea.querySelector('#huggingface-file-picker');
+  if (!picker) return;
+  picker.addEventListener('change', async () => {
+    const path = picker.value;
+    if (ui.modelUrlInput) {
+      ui.modelUrlInput.value = path ? fileUrl(path) : hfUrl;
+    }
+    // Comfy-Org repos name their folders after the ComfyUI models/ subfolder
+    const folder = path.includes('/') ? path.split('/')[0] : null;
+    if (folder) await ui.autoSelectModelTypeFromHuggingFace(folder);
+  });
 }

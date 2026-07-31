@@ -20,9 +20,8 @@ export function modalTemplate(settings = {}) {
           <form id="huggingface-download-form">
             <div class="huggingface-form-group">
               <label for="huggingface-model-url">Model URL or ID</label>
-              <input type="text" id="huggingface-model-url" class="huggingface-input" placeholder="e.g., https://huggingface.com/models/12345 or 12345" required>
+              <input type="text" id="huggingface-model-url" class="huggingface-input" placeholder="Comfy-Org/gemma-4, or a full file URL for a single file" required>
             </div>
-            <p style="font-size: 0.9em; color: #ccc; margin-top: -10px; margin-bottom: 15px;">You can optionally specify a version ID using "?modelVersionId=xxxxx" in the URL or in the field below.</p>
             <div class="huggingface-form-row">
               <div class="huggingface-form-group">
                 <label for="huggingface-model-type">Model Type (Save Location)</label>
@@ -41,10 +40,6 @@ export function modalTemplate(settings = {}) {
                 </div>
                 <p id="huggingface-save-base-path" style="font-size: 0.8em; color: #bbb; margin-top: 6px; word-break: break-all;"></p>
               </div>
-              <div class="huggingface-form-group">
-                <label for="huggingface-model-version-id">Version ID (Optional)</label>
-                <input type="number" id="huggingface-model-version-id" class="huggingface-input" placeholder="Overrides URL/Latest">
-              </div>
             </div>
             <div class="huggingface-form-row">
               <div class="huggingface-form-group">
@@ -53,8 +48,8 @@ export function modalTemplate(settings = {}) {
               </div>
               <div class="huggingface-form-group">
                 <label for="huggingface-connections">Connections</label>
-                <input type="number" id="huggingface-connections" class="huggingface-input" value="${numConnections}" min="1" max="16" step="1" required disabled>
-                <p style="font-size: 0.9em; color: #ccc; margin-top: 7px; margin-bottom: 15px;">Disabled: Only single connection possible for now</p>
+                <input type="number" id="huggingface-connections" class="huggingface-input" value="${numConnections}" min="1" max="16" step="1" required>
+                <p style="font-size: 0.9em; color: #ccc; margin-top: 7px; margin-bottom: 15px;">Parallel connections (1-16). Automatically falls back to one for small files or hosts without range support.</p>
               </div>
             </div>
             <div class="huggingface-form-group inline">
