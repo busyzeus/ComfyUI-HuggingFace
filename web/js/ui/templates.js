@@ -66,27 +66,30 @@ export function modalTemplate(settings = {}) {
           <form id="huggingface-search-form">
             <div class="huggingface-search-controls">
               <input type="text" id="huggingface-search-query" class="huggingface-input" placeholder="Search HuggingFace...">
-              <select id="huggingface-search-type" class="huggingface-select">
-                <option value="any">Any Type</option>
-              </select>
-              <select id="huggingface-search-base-model" class="huggingface-select">
-                <option value="any">Any Base Model</option>
+              <select id="huggingface-search-category" class="huggingface-select">
+                <option value="any">Any Category</option>
+                <option value="lora">LoRA</option>
+                <option value="gguf">GGUF</option>
+                <option value="diffusers">Diffusers</option>
               </select>
               <select id="huggingface-search-sort" class="huggingface-select">
-                <option value="Relevancy">Relevancy</option>
-                <option value="Highest Rated">Highest Rated</option>
-                <option value="Most Liked">Most Liked</option>
-                <option value="Most Discussed">Most Discussed</option>
-                <option value="Most Collected">Most Collected</option>
-                <option value="Most Buzz">Most Buzz</option>
                 <option value="Most Downloaded">Most Downloaded</option>
+                <option value="Trending">Trending</option>
+                <option value="Most Liked">Most Liked</option>
+                <option value="Recently Updated">Recently Updated</option>
                 <option value="Newest">Newest</option>
               </select>
             </div>
+            <label class="huggingface-checkbox-label" style="display: flex; align-items: center; gap: 6px; margin: 8px 0;">
+              <input type="checkbox" id="huggingface-search-comfyui-only" class="huggingface-checkbox" checked>
+              ComfyUI only
+            </label>
             <button type="submit" id="huggingface-search-submit" class="huggingface-button primary">Search</button>
           </form>
           <div id="huggingface-search-results" class="huggingface-search-results"></div>
-          <div id="huggingface-search-pagination" style="text-align: center; margin-top: 20px;"></div>
+          <div id="huggingface-search-pagination" style="text-align: center; margin-top: 20px;">
+            <button type="button" id="huggingface-search-load-more" class="huggingface-button" style="display: none;">Load more</button>
+          </div>
         </div>
         <div id="huggingface-tab-status" class="huggingface-downloader-tab-content">
           <div id="huggingface-status-content">

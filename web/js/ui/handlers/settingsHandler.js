@@ -83,7 +83,7 @@ export function applySettings(ui) {
             if (first) ui.downloadModelTypeSelect.value = first.value;
         }
     }
-    ui.searchPagination.limit = ui.settings.searchResultLimit || 20;
+    ui.searchState.limit = ui.settings.searchResultLimit || 20;
 }
 
 export async function loadGlobalRootSetting(ui) {
