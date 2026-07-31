@@ -40,6 +40,11 @@ gives us offsets at the cost of walking earlier pages.
 Valid `sort` values: `downloads`, `likes`, `lastModified`, `createdAt`,
 `trendingScore`. `author` raises `BadRequestError`.
 
+`list_models` must be called with **`full=True`**. Without it, results come
+back with `author=None` and `last_modified=None` even though `downloads` and
+`likes` are populated. `expand=[...]` is not a substitute: it drops any field
+not named, so asking for `lastModified` and `author` loses `likes`.
+
 Both `library=` and `tags=` are deprecated and will be removed in
 `huggingface_hub` 1.0. `filter=` is the replacement and returns identical
 results: `filter='comfyui'` and `filter=['comfyui', 'gguf']` were verified
