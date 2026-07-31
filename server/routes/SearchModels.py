@@ -1,6 +1,7 @@
 # ================================================
 # File: server/routes/SearchModels.py
 # ================================================
+import asyncio
 import traceback
 from itertools import islice
 from aiohttp import web
@@ -101,8 +102,14 @@ async def route_search_models(request):
             # list_models has no offset, but it pages lazily, so islice only
             # walks as far as the requested page. Taking one extra item is how
             # we learn whether a next page exists without a count endpoint.
+            #
+            # list_models() is a synchronous, requests-backed generator, and
+            # islice() drives it with blocking HTTP calls (one per page walked
+            # to reach `offset`). Run it in a worker thread so it can't stall
+            # the aiohttp event loop for the whole ComfyUI server.
             offset = (page - 1) * limit
-            window = list(islice(api.list_models(**kwargs), offset, offset + limit + 1))
+            window = await asyncio.to_thread(
+                lambda: list(islice(api.list_models(**kwargs), offset, offset + limit + 1)))
         except Exception as e:
             print(f"[Server Search] list_models failed: {e}")
             return web.json_response(
