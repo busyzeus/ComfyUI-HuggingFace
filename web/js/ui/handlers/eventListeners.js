@@ -100,32 +100,8 @@ export function setupEventListeners(ui) {
 
     // --- DYNAMIC CONTENT LISTENERS (Event Delegation) ---
 
-    // Status tab actions (Cancel/Retry/Open/Clear) and click-to-toggle blur on thumbs
+    // Status tab actions (Cancel/Retry/Open/Clear)
     ui.statusContent.addEventListener('click', (event) => {
-        const thumbContainer = event.target.closest('.huggingface-thumbnail-container');
-        if (thumbContainer) {
-            const nsfwLevel = Number(thumbContainer.dataset.nsfwLevel ?? thumbContainer.getAttribute('data-nsfw-level'));
-            const threshold = Number(ui.settings?.nsfwBlurMinLevel ?? 4);
-            const enabled = ui.settings?.hideMatureInSearch === true;
-            if (enabled && Number.isFinite(nsfwLevel) && nsfwLevel >= threshold) {
-                if (thumbContainer.classList.contains('blurred')) {
-                    thumbContainer.classList.remove('blurred');
-                    const overlay = thumbContainer.querySelector('.huggingface-nsfw-overlay');
-                    if (overlay) overlay.remove();
-                } else {
-                    thumbContainer.classList.add('blurred');
-                    if (!thumbContainer.querySelector('.huggingface-nsfw-overlay')) {
-                        const ov = document.createElement('div');
-                        ov.className = 'huggingface-nsfw-overlay';
-                        ov.title = 'R-rated: click to reveal';
-                        ov.textContent = 'R';
-                        thumbContainer.appendChild(ov);
-                    }
-                }
-                return; // consume
-            }
-        }
-
         const button = event.target.closest('button');
         if (!button) return;
 
@@ -136,32 +112,6 @@ export function setupEventListeners(ui) {
             else if (button.classList.contains('huggingface-openpath-button')) ui.handleOpenPath(downloadId, button);
         } else if (button.id === 'huggingface-clear-history-button') {
             ui.confirmClearModal.style.display = 'flex';
-        }
-    });
-
-    // Download preview click-to-toggle blur
-    ui.downloadPreviewArea.addEventListener('click', (event) => {
-        const thumbContainer = event.target.closest('.huggingface-thumbnail-container');
-        if (thumbContainer) {
-            const nsfwLevel = Number(thumbContainer.dataset.nsfwLevel ?? thumbContainer.getAttribute('data-nsfw-level'));
-            const threshold = Number(ui.settings?.nsfwBlurMinLevel ?? 4);
-            const enabled = ui.settings?.hideMatureInSearch === true;
-            if (enabled && Number.isFinite(nsfwLevel) && nsfwLevel >= threshold) {
-                if (thumbContainer.classList.contains('blurred')) {
-                    thumbContainer.classList.remove('blurred');
-                    const overlay = thumbContainer.querySelector('.huggingface-nsfw-overlay');
-                    if (overlay) overlay.remove();
-                } else {
-                    thumbContainer.classList.add('blurred');
-                    if (!thumbContainer.querySelector('.huggingface-nsfw-overlay')) {
-                        const ov = document.createElement('div');
-                        ov.className = 'huggingface-nsfw-overlay';
-                        ov.title = 'R-rated: click to reveal';
-                        ov.textContent = 'R';
-                        thumbContainer.appendChild(ov);
-                    }
-                }
-            }
         }
     });
 

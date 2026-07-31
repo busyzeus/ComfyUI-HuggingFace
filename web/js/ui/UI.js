@@ -102,8 +102,6 @@ export class HuggingFaceDownloaderUI {
         this.settingsConnectionsInput = this.modal.querySelector('#huggingface-settings-connections');
         this.settingsDefaultTypeSelect = this.modal.querySelector('#huggingface-settings-default-type');
         this.settingsAutoOpenCheckbox = this.modal.querySelector('#huggingface-settings-auto-open-status');
-        this.settingsHideMatureCheckbox = this.modal.querySelector('#huggingface-settings-hide-mature');
-        this.settingsNsfwThresholdInput = this.modal.querySelector('#huggingface-settings-nsfw-threshold');
         this.settingsSaveButton = this.modal.querySelector('#huggingface-settings-save');
 
         // Toast Notification
