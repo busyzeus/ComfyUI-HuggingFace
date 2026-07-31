@@ -29,7 +29,6 @@ export class HuggingFaceDownloaderUI {
         this.modelTypes = {};
         this.statusInterval = null;
         this.statusData = { queue: [], active: [], history: [] };
-        this.baseModels = [];
         this.searchState = { page: 1, limit: 20, query: '', category: 'any', comfyuiOnly: true, sort: 'Most Downloaded' };
         this.settings = this.getDefaultSettings();
         this.toastTimeout = null;
@@ -202,28 +201,6 @@ export class HuggingFaceDownloaderUI {
     }
 
     // (loadAndPopulateRoots removed; dynamic types already reflect models/ subfolders)
-
-    async populateBaseModels() {
-        console.log("[HuggingFace] Populating base models...");
-        try {
-            const result = await HuggingFaceDownloaderAPI.getBaseModels();
-            if (!result || !Array.isArray(result.base_models)) {
-                throw new Error("Invalid base models data format received.");
-            }
-            this.baseModels = result.base_models.sort();
-            const existingOptions = Array.from(this.searchBaseModelSelect.options);
-            existingOptions.slice(1).forEach(opt => opt.remove());
-            this.baseModels.forEach(baseModelName => {
-                const option = document.createElement('option');
-                option.value = baseModelName;
-                option.textContent = baseModelName;
-                this.searchBaseModelSelect.appendChild(option);
-            });
-        } catch (error) {
-             console.error("[HuggingFace] Failed to get or populate base models:", error);
-             this.showToast('Failed to load base models list', 'error');
-        }
-    }
 
     switchTab(tabId) {
         if (this.activeTab === tabId || !this.tabs[tabId] || !this.tabContents[tabId]) return;
