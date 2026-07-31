@@ -1,7 +1,7 @@
 import { Feedback } from "./feedback.js";
 import { setupEventListeners } from "./handlers/eventListeners.js";
 import { handleDownloadSubmit, fetchAndDisplayDownloadPreview, debounceFetchDownloadPreview } from "./handlers/downloadHandler.js";
-import { handleSearchSubmit } from "./handlers/searchHandler.js";
+import { handleSearchSubmit, handleSearchLoadMore } from "./handlers/searchHandler.js";
 import {
     handleSettingsSave,
     loadAndApplySettings,
@@ -29,8 +29,7 @@ export class HuggingFaceDownloaderUI {
         this.modelTypes = {};
         this.statusInterval = null;
         this.statusData = { queue: [], active: [], history: [] };
-        this.baseModels = [];
-        this.searchPagination = { currentPage: 1, totalPages: 1, limit: 20 };
+        this.searchState = { page: 1, limit: 20, query: '', category: 'any', comfyuiOnly: true, sort: 'Most Downloaded' };
         this.settings = this.getDefaultSettings();
         this.toastTimeout = null;
         this.modelPreviewDebounceTimeout = null;
@@ -73,8 +72,9 @@ export class HuggingFaceDownloaderUI {
         // Search Tab
         this.searchForm = this.modal.querySelector('#huggingface-search-form');
         this.searchQueryInput = this.modal.querySelector('#huggingface-search-query');
-        this.searchTypeSelect = this.modal.querySelector('#huggingface-search-type');
-        this.searchBaseModelSelect = this.modal.querySelector('#huggingface-search-base-model');
+        this.searchCategorySelect = this.modal.querySelector('#huggingface-search-category');
+        this.searchComfyuiOnlyCheckbox = this.modal.querySelector('#huggingface-search-comfyui-only');
+        this.searchLoadMoreButton = this.modal.querySelector('#huggingface-search-load-more');
         this.searchSortSelect = this.modal.querySelector('#huggingface-search-sort');
         this.searchPeriodSelect = this.modal.querySelector('#huggingface-search-period');
         this.searchSubmitButton = this.modal.querySelector('#huggingface-search-submit');
@@ -102,8 +102,6 @@ export class HuggingFaceDownloaderUI {
         this.settingsConnectionsInput = this.modal.querySelector('#huggingface-settings-connections');
         this.settingsDefaultTypeSelect = this.modal.querySelector('#huggingface-settings-default-type');
         this.settingsAutoOpenCheckbox = this.modal.querySelector('#huggingface-settings-auto-open-status');
-        this.settingsHideMatureCheckbox = this.modal.querySelector('#huggingface-settings-hide-mature');
-        this.settingsNsfwThresholdInput = this.modal.querySelector('#huggingface-settings-nsfw-threshold');
         this.settingsSaveButton = this.modal.querySelector('#huggingface-settings-save');
 
         // Toast Notification
@@ -124,7 +122,6 @@ export class HuggingFaceDownloaderUI {
     async initializeUI() {
         console.info("[HuggingFace] Initializing UI components...");
         await this.populateModelTypes();
-        await this.populateBaseModels();
         this.loadAndApplySettings();
         await this.loadGlobalRootSetting();
         if (this.downloadModelTypeSelect) {
@@ -143,7 +140,6 @@ export class HuggingFaceDownloaderUI {
             const sortedTypes = Object.entries(this.modelTypes).sort((a, b) => a[1].localeCompare(b[1]));
 
             this.downloadModelTypeSelect.innerHTML = '';
-            this.searchTypeSelect.innerHTML = '<option value="any">Any Type</option>';
             this.settingsDefaultTypeSelect.innerHTML = '';
 
             sortedTypes.forEach(([key, displayName]) => {
@@ -152,7 +148,6 @@ export class HuggingFaceDownloaderUI {
                 option.textContent = displayName;
             this.downloadModelTypeSelect.appendChild(option.cloneNode(true));
             this.settingsDefaultTypeSelect.appendChild(option.cloneNode(true));
-            this.searchTypeSelect.appendChild(option.cloneNode(true));
         });
         // After types are populated, load subdirs for the current selection
         await this.loadAndPopulateSubdirs(this.downloadModelTypeSelect.value);
@@ -204,28 +199,6 @@ export class HuggingFaceDownloaderUI {
     }
 
     // (loadAndPopulateRoots removed; dynamic types already reflect models/ subfolders)
-
-    async populateBaseModels() {
-        console.log("[HuggingFace] Populating base models...");
-        try {
-            const result = await HuggingFaceDownloaderAPI.getBaseModels();
-            if (!result || !Array.isArray(result.base_models)) {
-                throw new Error("Invalid base models data format received.");
-            }
-            this.baseModels = result.base_models.sort();
-            const existingOptions = Array.from(this.searchBaseModelSelect.options);
-            existingOptions.slice(1).forEach(opt => opt.remove());
-            this.baseModels.forEach(baseModelName => {
-                const option = document.createElement('option');
-                option.value = baseModelName;
-                option.textContent = baseModelName;
-                this.searchBaseModelSelect.appendChild(option);
-            });
-        } catch (error) {
-             console.error("[HuggingFace] Failed to get or populate base models:", error);
-             this.showToast('Failed to load base models list', 'error');
-        }
-    }
 
     switchTab(tabId) {
         if (this.activeTab === tabId || !this.tabs[tabId] || !this.tabContents[tabId]) return;
@@ -302,7 +275,8 @@ export class HuggingFaceDownloaderUI {
 
     // --- Rendering (delegated to external renderers) ---
     renderDownloadList = (items, container, emptyMessage) => renderDownloadList(this, items, container, emptyMessage);
-    renderSearchResults = (items) => renderSearchResults(this, items);
+    renderSearchResults = (items, opts) => renderSearchResults(this, items, opts);
+    handleSearchLoadMore = () => handleSearchLoadMore(this);
     renderDownloadPreview = (data) => renderDownloadPreview(this, data);
     
     // --- Auto-select model type based on HuggingFace model type ---
@@ -391,54 +365,6 @@ export class HuggingFaceDownloaderUI {
         }
     }
 
-    renderSearchPagination(metadata) {
-        if (!this.searchPaginationContainer) return;
-        if (!metadata || metadata.totalPages <= 1) {
-            this.searchPaginationContainer.innerHTML = '';
-            this.searchPagination = { ...this.searchPagination, ...metadata };
-            return;
-        }
-
-        this.searchPagination = { ...this.searchPagination, ...metadata };
-        const { currentPage, totalPages, totalItems } = this.searchPagination;
-
-        const createButton = (text, page, isDisabled = false, isCurrent = false) => {
-            const button = document.createElement('button');
-            button.className = `huggingface-button small huggingface-page-button ${isCurrent ? 'primary active' : ''}`;
-            button.dataset.page = page;
-            button.disabled = isDisabled;
-            button.innerHTML = text;
-            button.type = 'button';
-            return button;
-        };
-
-        const fragment = document.createDocumentFragment();
-        fragment.appendChild(createButton('&laquo; Prev', currentPage - 1, currentPage === 1));
-        
-        let startPage = Math.max(1, currentPage - 2);
-        let endPage = Math.min(totalPages, currentPage + 2);
-
-        if (startPage > 1) fragment.appendChild(createButton('1', 1));
-        if (startPage > 2) fragment.appendChild(document.createElement('span')).textContent = '...';
-
-        for (let i = startPage; i <= endPage; i++) {
-            fragment.appendChild(createButton(i, i, false, i === currentPage));
-        }
-
-        if (endPage < totalPages - 1) fragment.appendChild(document.createElement('span')).textContent = '...';
-        if (endPage < totalPages) fragment.appendChild(createButton(totalPages, totalPages));
-        
-        fragment.appendChild(createButton('Next &raquo;', currentPage + 1, currentPage === totalPages));
-
-        const info = document.createElement('div');
-        info.className = 'huggingface-pagination-info';
-        info.textContent = `Page ${currentPage} of ${totalPages} (${totalItems.toLocaleString()} models)`;
-        fragment.appendChild(info);
-
-        this.searchPaginationContainer.innerHTML = '';
-        this.searchPaginationContainer.appendChild(fragment);
-    }
-
     // --- Event Handlers and State Management (delegated to handlers) ---
     setupEventListeners = () => setupEventListeners(this);
     getDefaultSettings = () => getDefaultSettings();
@@ -451,7 +377,7 @@ export class HuggingFaceDownloaderUI {
     handleSetGlobalRoot = () => handleSetGlobalRoot(this);
     handleClearGlobalRoot = () => handleClearGlobalRoot(this);
     handleDownloadSubmit = () => handleDownloadSubmit(this);
-    handleSearchSubmit = () => handleSearchSubmit(this);
+    handleSearchSubmit = (opts) => handleSearchSubmit(this, opts);
     fetchAndDisplayDownloadPreview = () => fetchAndDisplayDownloadPreview(this);
     debounceFetchDownloadPreview = (delay) => debounceFetchDownloadPreview(this, delay);
     startStatusUpdates = () => startStatusUpdates(this);

@@ -64,15 +64,20 @@ export function setupEventListeners(ui) {
 
     ui.searchForm.addEventListener('submit', (event) => {
         event.preventDefault();
-        if (!ui.searchQueryInput.value.trim() && ui.searchTypeSelect.value === 'any' && ui.searchBaseModelSelect.value === 'any') {
-            ui.showToast("Please enter a search query or select a filter.", "error");
-            if (ui.searchResultsContainer) ui.searchResultsContainer.innerHTML = '<p>Please enter a search query or select a filter.</p>';
-            if (ui.searchPaginationContainer) ui.searchPaginationContainer.innerHTML = '';
+        const hasQuery = ui.searchQueryInput.value.trim();
+        const hasFilter = ui.searchCategorySelect.value !== 'any' || ui.searchComfyuiOnlyCheckbox.checked;
+        if (!hasQuery && !hasFilter) {
+            ui.showToast("Enter a search query or choose a filter.", "error");
+            ui.searchResultsContainer.innerHTML = '<p>Enter a query or choose a filter, then click Search.</p>';
+            if (ui.searchLoadMoreButton) ui.searchLoadMoreButton.style.display = 'none';
             return;
         }
-        ui.searchPagination.currentPage = 1;
         ui.handleSearchSubmit();
     });
+
+    if (ui.searchLoadMoreButton) {
+        ui.searchLoadMoreButton.addEventListener('click', () => ui.handleSearchLoadMore());
+    }
 
     ui.settingsForm.addEventListener('submit', (event) => {
         event.preventDefault();
@@ -95,32 +100,8 @@ export function setupEventListeners(ui) {
 
     // --- DYNAMIC CONTENT LISTENERS (Event Delegation) ---
 
-    // Status tab actions (Cancel/Retry/Open/Clear) and click-to-toggle blur on thumbs
+    // Status tab actions (Cancel/Retry/Open/Clear)
     ui.statusContent.addEventListener('click', (event) => {
-        const thumbContainer = event.target.closest('.huggingface-thumbnail-container');
-        if (thumbContainer) {
-            const nsfwLevel = Number(thumbContainer.dataset.nsfwLevel ?? thumbContainer.getAttribute('data-nsfw-level'));
-            const threshold = Number(ui.settings?.nsfwBlurMinLevel ?? 4);
-            const enabled = ui.settings?.hideMatureInSearch === true;
-            if (enabled && Number.isFinite(nsfwLevel) && nsfwLevel >= threshold) {
-                if (thumbContainer.classList.contains('blurred')) {
-                    thumbContainer.classList.remove('blurred');
-                    const overlay = thumbContainer.querySelector('.huggingface-nsfw-overlay');
-                    if (overlay) overlay.remove();
-                } else {
-                    thumbContainer.classList.add('blurred');
-                    if (!thumbContainer.querySelector('.huggingface-nsfw-overlay')) {
-                        const ov = document.createElement('div');
-                        ov.className = 'huggingface-nsfw-overlay';
-                        ov.title = 'R-rated: click to reveal';
-                        ov.textContent = 'R';
-                        thumbContainer.appendChild(ov);
-                    }
-                }
-                return; // consume
-            }
-        }
-
         const button = event.target.closest('button');
         if (!button) return;
 
@@ -134,103 +115,20 @@ export function setupEventListeners(ui) {
         }
     });
 
-    // Download preview click-to-toggle blur
-    ui.downloadPreviewArea.addEventListener('click', (event) => {
-        const thumbContainer = event.target.closest('.huggingface-thumbnail-container');
-        if (thumbContainer) {
-            const nsfwLevel = Number(thumbContainer.dataset.nsfwLevel ?? thumbContainer.getAttribute('data-nsfw-level'));
-            const threshold = Number(ui.settings?.nsfwBlurMinLevel ?? 4);
-            const enabled = ui.settings?.hideMatureInSearch === true;
-            if (enabled && Number.isFinite(nsfwLevel) && nsfwLevel >= threshold) {
-                if (thumbContainer.classList.contains('blurred')) {
-                    thumbContainer.classList.remove('blurred');
-                    const overlay = thumbContainer.querySelector('.huggingface-nsfw-overlay');
-                    if (overlay) overlay.remove();
-                } else {
-                    thumbContainer.classList.add('blurred');
-                    if (!thumbContainer.querySelector('.huggingface-nsfw-overlay')) {
-                        const ov = document.createElement('div');
-                        ov.className = 'huggingface-nsfw-overlay';
-                        ov.title = 'R-rated: click to reveal';
-                        ov.textContent = 'R';
-                        thumbContainer.appendChild(ov);
-                    }
-                }
-            }
-        }
-    });
-
-    // Search results actions, including click-to-toggle blur
+    // Search results: hand a repo to the Download tab, which shows its files
+    // and sizes before anything downloads.
     ui.searchResultsContainer.addEventListener('click', (event) => {
-        const thumbContainer = event.target.closest('.huggingface-thumbnail-container');
-        if (thumbContainer) {
-            const nsfwLevel = Number(thumbContainer.dataset.nsfwLevel ?? thumbContainer.getAttribute('data-nsfw-level'));
-            const threshold = Number(ui.settings?.nsfwBlurMinLevel ?? 4);
-            const enabled = ui.settings?.hideMatureInSearch === true;
-            if (enabled && Number.isFinite(nsfwLevel) && nsfwLevel >= threshold) {
-                if (thumbContainer.classList.contains('blurred')) {
-                    thumbContainer.classList.remove('blurred');
-                    const overlay = thumbContainer.querySelector('.huggingface-nsfw-overlay');
-                    if (overlay) overlay.remove();
-                } else {
-                    thumbContainer.classList.add('blurred');
-                    if (!thumbContainer.querySelector('.huggingface-nsfw-overlay')) {
-                        const ov = document.createElement('div');
-                        ov.className = 'huggingface-nsfw-overlay';
-                        ov.title = 'R-rated: click to reveal';
-                        ov.textContent = 'R';
-                        thumbContainer.appendChild(ov);
-                    }
-                }
-                return; // Don't trigger other actions on this click
-            }
-        }
+        const openButton = event.target.closest('.huggingface-search-open-button');
+        if (!openButton) return;
+        event.preventDefault();
+        const modelId = openButton.dataset.modelId;
+        if (!modelId) return;
 
-        const downloadButton = event.target.closest('.huggingface-search-download-button');
-        if (downloadButton) {
-            event.preventDefault();
-            const { modelId, modelType, creator, modelName } = downloadButton.dataset;
-            if (!modelId) {
-                ui.showToast("Error: Missing model ID for download.", "error");
-                return;
-            }
-            const modelTypeInternalKey = Object.keys(ui.modelTypes).find(key => ui.modelTypes[key]?.toLowerCase() === modelType?.toLowerCase()) || ui.settings.defaultModelType;
-
-            ui.modelUrlInput.value = modelId;
-            ui.customFilenameInput.value = modelName ? `${modelName.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
-            ui.forceRedownloadCheckbox.checked = false;
-            ui.downloadModelTypeSelect.value = modelTypeInternalKey;
-
-            ui.switchTab('download');
-            ui.showToast(`Filled download form for "${modelName || modelId}" by ${creator || 'Unknown'}.`, 'info', 4000);
-            ui.fetchAndDisplayDownloadPreview();
-            return;
-        }
-
-        const viewAllButton = event.target.closest('.show-all-versions-button');
-        if (viewAllButton) {
-            const modelId = viewAllButton.dataset.modelId;
-            const versionsContainer = ui.searchResultsContainer.querySelector(`#all-versions-${modelId}`);
-            if (versionsContainer) {
-                const currentlyVisible = versionsContainer.style.display !== 'none';
-                versionsContainer.style.display = currentlyVisible ? 'none' : 'flex';
-                viewAllButton.innerHTML = currentlyVisible
-                    ? `All versions (${viewAllButton.dataset.totalVersions}) <i class="fas fa-chevron-down"></i>`
-                    : `Show less <i class="fas fa-chevron-up"></i>`;
-            }
-        }
-    });
-
-    // Pagination
-    ui.searchPaginationContainer.addEventListener('click', (event) => {
-        const button = event.target.closest('.huggingface-page-button');
-        if (button && !button.disabled) {
-            const page = parseInt(button.dataset.page, 10);
-            if (page && page !== ui.searchPagination.currentPage) {
-                ui.searchPagination.currentPage = page;
-                ui.handleSearchSubmit();
-            }
-        }
+        ui.modelUrlInput.value = modelId;
+        ui.customFilenameInput.value = '';
+        ui.forceRedownloadCheckbox.checked = false;
+        ui.switchTab('download');
+        ui.fetchAndDisplayDownloadPreview();
     });
 
     // Confirmation Modal

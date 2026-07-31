@@ -66,27 +66,30 @@ export function modalTemplate(settings = {}) {
           <form id="huggingface-search-form">
             <div class="huggingface-search-controls">
               <input type="text" id="huggingface-search-query" class="huggingface-input" placeholder="Search HuggingFace...">
-              <select id="huggingface-search-type" class="huggingface-select">
-                <option value="any">Any Type</option>
-              </select>
-              <select id="huggingface-search-base-model" class="huggingface-select">
-                <option value="any">Any Base Model</option>
+              <select id="huggingface-search-category" class="huggingface-select">
+                <option value="any">Any Category</option>
+                <option value="lora">LoRA</option>
+                <option value="gguf">GGUF</option>
+                <option value="diffusers">Diffusers</option>
               </select>
               <select id="huggingface-search-sort" class="huggingface-select">
-                <option value="Relevancy">Relevancy</option>
-                <option value="Highest Rated">Highest Rated</option>
-                <option value="Most Liked">Most Liked</option>
-                <option value="Most Discussed">Most Discussed</option>
-                <option value="Most Collected">Most Collected</option>
-                <option value="Most Buzz">Most Buzz</option>
                 <option value="Most Downloaded">Most Downloaded</option>
+                <option value="Trending">Trending</option>
+                <option value="Most Liked">Most Liked</option>
+                <option value="Recently Updated">Recently Updated</option>
                 <option value="Newest">Newest</option>
               </select>
             </div>
+            <label class="huggingface-checkbox-label" style="display: flex; align-items: center; gap: 6px; margin: 8px 0;">
+              <input type="checkbox" id="huggingface-search-comfyui-only" class="huggingface-checkbox" checked>
+              ComfyUI only
+            </label>
             <button type="submit" id="huggingface-search-submit" class="huggingface-button primary">Search</button>
           </form>
           <div id="huggingface-search-results" class="huggingface-search-results"></div>
-          <div id="huggingface-search-pagination" style="text-align: center; margin-top: 20px;"></div>
+          <div id="huggingface-search-pagination" style="text-align: center; margin-top: 20px;">
+            <button type="button" id="huggingface-search-load-more" class="huggingface-button" style="display: none;">Load more</button>
+          </div>
         </div>
         <div id="huggingface-tab-status" class="huggingface-downloader-tab-content">
           <div id="huggingface-status-content">
@@ -151,18 +154,6 @@ export function modalTemplate(settings = {}) {
                 <div class="huggingface-form-group inline">
                   <input type="checkbox" id="huggingface-settings-auto-open-status" class="huggingface-checkbox">
                   <label for="huggingface-settings-auto-open-status">Switch to Status tab after starting download</label>
-                </div>
-                <div class="huggingface-form-group inline">
-                  <input type="checkbox" id="huggingface-settings-hide-mature" class="huggingface-checkbox" ${settings.hideMatureInSearch ? 'checked' : ''}>
-                  <label for="huggingface-settings-hide-mature">Hide R-rated (Mature) images in search (click to reveal)</label>
-                </div>
-                <div class="huggingface-form-group">
-                  <label for="huggingface-settings-nsfw-threshold">NSFW Blur Threshold (nsfwLevel)</label>
-                  <input type="number" id="huggingface-settings-nsfw-threshold" class="huggingface-input" value="${Number.isFinite(settings.nsfwBlurMinLevel) ? settings.nsfwBlurMinLevel : 4}" min="0" max="128" step="1">
-                  <p style="font-size: 0.85em; color: #bbb; margin-top: 5px;">
-                    Blur thumbnails when an image's <code>nsfwLevel</code> is greater than or equal to this value.
-                    Higher numbers indicate more explicit content. None (Safe/PG): 1, Mild (PG-13): 2, Mature (R): 4, Adult (X): 5, Extra Explicit (R): 8, Explicit (XXX): 16/32+
-                  </p>
                 </div>
               </div>
             </div>

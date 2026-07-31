@@ -77,10 +77,6 @@ export class HuggingFaceDownloaderAPI {
     });
   }
 
-  static async getBaseModels() {
-    return await this._request("/huggingface/base_models");
-  }
-
   static async getModelTypes() {
     return await this._request("/huggingface/model_types");
   }

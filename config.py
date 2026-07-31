@@ -52,36 +52,6 @@ MODEL_TYPE_DIRS = {
     "other": ("Other", None)
 }
 
-# HuggingFace API specific type mapping (for search filters)
-# Maps internal key (lowercase) to HuggingFace API 'types' parameter value
-HUGGINGFACE_API_TYPE_MAP = {
-    "checkpoint": "Checkpoint",
-    "lora": "LORA",
-    "locon": "LoCon",
-    "lycoris": "LORA", # HuggingFace might group LyCORIS under LORA search type
-    "vae": "VAE",
-    "embedding": "TextualInversion",
-    "hypernetwork": "Hypernetwork",
-    "controlnet": "Controlnet",
-    "motionmodule": "MotionModule",
-    "poses": "Poses",
-    "wildcards": "Wildcards",
-    "upscaler": "Upscaler", 
-    "unet": "UNET",
-    "diffusionmodels": "Diffusion Model", # Wan 2.2 and similar
-}
-
-AVAILABLE_MEILI_BASE_MODELS = [
-    "AuraFlow", "CogVideoX", "Flux.1 D", "Flux.1 S", "Hunyuan 1", "Hunyuan Video",
-    "Illustrious", "Kolors", "LTXV", "Lumina", "Mochi", "NoobAI", "ODOR", "Other",
-    "PixArt E", "PixArt a", "Playground v2", "Pony", "SD 1.4", "SD 1.5",
-    "SD 1.5 Hyper", "SD 1.5 LCM", "SD 2.0", "SD 2.0 768", "SD 2.1", "SD 2.1 768",
-    "SD 2.1 Unclip", "SD 3", "SD 3.5", "SD 3.5 Large", "SD 3.5 Large Turbo",
-    "SD 3.5 Medium", "SDXL 0.9", "SDXL 1.0", "SDXL 1.0 LCM", "SDXL Distilled",
-    "SDXL Hyper", "SDXL Lightning", "SDXL Turbo", "SVD", "SVD XT", "Stable Cascade",
-    "Wan Video"
-]
-
 # --- Filename Suffixes ---
 METADATA_SUFFIX = ".cminfo.json"
 PREVIEW_SUFFIX = ".preview.jpeg" # Keep as requested, even if source is png/webp
