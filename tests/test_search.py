@@ -99,11 +99,13 @@ narrow = call({"query": "flux", "comfyui_only": True, "limit": 50})
 wide_ids = {i["id"] for i in wide["items"]}
 narrow_ids = {i["id"] for i in narrow["items"]}
 check_true("comfyui results differ from unfiltered", wide_ids != narrow_ids)
+check_true("narrow results are non-empty", len(narrow["items"]) > 0)
 check_true("every comfyui result is tagged comfyui",
            all("comfyui" in i["tags"] for i in narrow["items"]))
 
 print("route: a category narrows further")
 gguf = call({"query": "wan", "comfyui_only": True, "category": "gguf", "limit": 10})
+check_true("gguf results are non-empty", len(gguf["items"]) > 0)
 check_true("gguf results are tagged gguf",
            all("gguf" in i["tags"] for i in gguf["items"]))
 
