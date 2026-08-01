@@ -42,9 +42,8 @@ export function renderSearchResults(ui, items, { append = false } = {}) {
     listItem.dataset.modelId = item.id;
     listItem.innerHTML = `
       <div class="huggingface-search-info">
-        <h4>${escapeHtml(item.name)}
+        <h4>${item.gated ? '<span class="base-model-badge" title="Access must be requested on HuggingFace">gated</span> ' : ''}${escapeHtml(item.name)}
           <span style="font-weight: normal; font-size: 0.9em;">by ${escapeHtml(item.author)}</span>
-          ${item.gated ? '<span class="base-model-badge" title="Access must be requested on HuggingFace">gated</span>' : ''}
         </h4>
         <div class="huggingface-search-stats">
           <span title="Downloads"><i class="fas fa-download"></i> ${formatCount(item.downloads)}</span>

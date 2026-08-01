@@ -76,10 +76,8 @@ export class HuggingFaceDownloaderUI {
         this.searchComfyuiOnlyCheckbox = this.modal.querySelector('#huggingface-search-comfyui-only');
         this.searchLoadMoreButton = this.modal.querySelector('#huggingface-search-load-more');
         this.searchSortSelect = this.modal.querySelector('#huggingface-search-sort');
-        this.searchPeriodSelect = this.modal.querySelector('#huggingface-search-period');
         this.searchSubmitButton = this.modal.querySelector('#huggingface-search-submit');
         this.searchResultsContainer = this.modal.querySelector('#huggingface-search-results');
-        this.searchPaginationContainer = this.modal.querySelector('#huggingface-search-pagination');
 
         // Status Tab
         this.statusContent = this.modal.querySelector('#huggingface-status-content');

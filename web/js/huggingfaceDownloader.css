@@ -397,47 +397,6 @@
     flex-shrink: 0; 
 }
 
-.huggingface-search-thumbnail {
-    width: 120px; /* Slightly larger for search */
-    height: 170px;
-    object-fit: cover;
-    border-radius: 4px;
-    background-color: #333;
-    flex-shrink: 0;
-}
-
-.huggingface-search-meta-info {
-    font-size: 0.85em;
-    color: #aaa; 
-    margin-bottom: 5px;
-    display: flex;
-    gap: 15px; 
-    flex-wrap: wrap; 
-}
-
-.huggingface-search-meta-info span {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px; 
-}
-
-.huggingface-search-meta-info i {
-    color: #ccc; 
-}
-.huggingface-type-badge {
-    position: absolute;
-    bottom: 5px;         /* Adjust spacing from bottom */
-    left: 5px;           /* Adjust spacing from left */
-    background-color: rgb(48, 94, 70); /* Black background with transparency */
-    color: white; 
-    padding: 10px 8px;    /* Adjust padding (top/bottom, left/right) */
-    border-radius: 10px; /* Adjust for desired roundness */
-    font-size: 0.75em;   /* Adjust font size */
-    font-weight: bold; 
-    z-index: 2;          /* Ensure it's above the image */
-    white-space: nowrap; /* Prevent text wrapping */
-}
-
 .huggingface-search-info {
     flex-grow: 1;
     display: flex;
@@ -488,27 +447,6 @@
     flex-shrink: 0;
 }
 
-.version-buttons-container {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end; 
-    gap: 5px;
-}
-
-.all-versions-container {
-    display: flex;
-    flex-direction: column; 
-    gap: 5px;
-    padding-bottom: 5px;
-    white-space: nowrap; /* Prevent wrapping */
-    max-width: 100%; /* Prevent excessive width */
-    align-items: flex-end; 
-}
-
-.show-all-versions-button {
-    align-self: flex-end; /* Align button to left */
-    margin-top: auto; /* Push to the bottom */
-}
 .base-model-badge {
     display: inline-block; /* Allows padding and background */
     background-color: #3a3a3a;  /* Or a specific purple hex code like #800080 */
@@ -697,8 +635,6 @@
 }
 
 /* Ensure both img and video within the thumbnail container behave similarly */
-.huggingface-thumbnail-container img.huggingface-search-thumbnail,
-.huggingface-thumbnail-container video.huggingface-search-thumbnail,
 .huggingface-thumbnail-container img.huggingface-download-thumbnail,
 .huggingface-thumbnail-container video.huggingface-download-thumbnail {
     display: block; /* Prevent extra space below */
@@ -718,36 +654,3 @@
     border-radius: 4px; /* Match styling */
 }
 
-/* Blur/Hide for R-rated thumbnails */
-.huggingface-thumbnail-container.blurred img.huggingface-search-thumbnail,
-.huggingface-thumbnail-container.blurred video.huggingface-search-thumbnail,
-.huggingface-thumbnail-container.blurred img.huggingface-download-thumbnail,
-.huggingface-thumbnail-container.blurred video.huggingface-download-thumbnail {
-    filter: blur(14px) brightness(0.6) saturate(0.6);
-    pointer-events: none; /* Let clicks hit the container */
-}
-.huggingface-thumbnail-container .huggingface-nsfw-overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    font-weight: 800;
-    font-size: 20px;
-    letter-spacing: 1px;
-    background: rgba(0,0,0,0.35);
-    z-index: 3;
-    user-select: none;
-}
-/* Make it obvious it’s clickable */
-.huggingface-thumbnail-container.blurred { cursor: pointer; }
-
-/* Style for the type badge (likely exists) */
-.huggingface-type-badge {
-    /* ... existing styles ... */
-    position: absolute;
-    bottom: 5px;
-    right: 5px;
-    /* ... */
-}

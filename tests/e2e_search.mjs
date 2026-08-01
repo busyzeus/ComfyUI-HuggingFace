@@ -94,6 +94,41 @@ try {
   check('every row can be opened',
     await page.locator('.huggingface-search-open-button').count(), firstCount);
 
+  // The bug this whole rewrite existed to fix was the route and the renderer
+  // disagreeing on field names, and that failure is silent: escapeHtml turns a
+  // typo like item.autor into an empty string. So pin the rendered row against
+  // what the API actually returned for that same repo, rather than trusting
+  // that anything rendered at all.
+  console.log('Rendered fields match what the route returned');
+  const firstRow = rows.first();
+  const firstId = await firstRow.locator('.huggingface-search-open-button').getAttribute('data-model-id');
+
+  const apiResponse = await fetch(`${BASE}/api/huggingface/search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: QUERY, comfyui_only: true, limit: 20 }),
+  });
+  const apiBody = await apiResponse.json();
+  // Match by id, not by position - ranking can shift between the two calls
+  const expected = (apiBody.items || []).find(item => item.id === firstId);
+  check('the API returns the repo the first row shows', Boolean(expected), true);
+
+  if (expected) {
+    const rowText = await firstRow.innerText();
+    check('author rendered', rowText.includes(`by ${expected.author}`), true);
+    check('name rendered', rowText.includes(expected.name), true);
+    check('downloads match the API', downloadsCount, expected.downloads);
+    const likesText = await firstRow.locator('[title="Likes"]').innerText();
+    check('likes match the API', Number(likesText.replace(/\D/g, '')), expected.likes);
+    check('updated date rendered when the API supplies one',
+      expected.updated ? (await firstRow.locator('[title="Last updated"]').count()) === 1 : true,
+      true);
+    const renderedTags = await firstRow.locator('.huggingface-search-tag').allTextContents();
+    check('tags rendered come from the API',
+      renderedTags.length > 0 && renderedTags.every(tag => expected.tags.includes(tag)),
+      true);
+  }
+
   console.log('Load more appends rather than replacing');
   const loadMore = page.locator('#huggingface-search-load-more');
   const loadMoreVisible = await loadMore.isVisible();
@@ -110,6 +145,54 @@ try {
     }
   }
   check('more rows than before', grew, true);
+
+  // A failed Load more used to dead-end: the button stayed hidden and the page
+  // counter stayed advanced, so the only way out was a fresh search that threw
+  // away everything already loaded - and the retry, if you got one, skipped the
+  // page that failed.
+  console.log('A failed Load more can be retried, on the page that failed');
+  const rowsBeforeFailure = await rows.count();
+  // The handler is supposed to log when a request fails, so the abort below
+  // produces a console error on purpose. Remember where the induced ones start
+  // so they can be dropped later - anything else logged in that window stays.
+  const errorsBeforeInducedFailure = consoleErrors.length;
+  let failedPage = null;
+  await page.route('**/api/huggingface/search', async route => {
+    failedPage = JSON.parse(route.request().postData()).page;
+    await route.abort();
+  });
+  await loadMore.click();
+  await page.waitForTimeout(4000);
+  await page.unroute('**/api/huggingface/search');
+
+  check('the failure was a request for page 3', failedPage, 3);
+  check('no rows were lost', await rows.count(), rowsBeforeFailure);
+  check('load more is offered again', await loadMore.isVisible(), true);
+
+  let retriedPage = null;
+  await page.route('**/api/huggingface/search', async route => {
+    retriedPage = JSON.parse(route.request().postData()).page;
+    await route.continue();
+  });
+  await loadMore.click();
+  const retryDeadline = Date.now() + 45000;
+  let retryGrew = false;
+  while (Date.now() < retryDeadline) {
+    if ((await rows.count()) > rowsBeforeFailure) { retryGrew = true; break; }
+    await page.waitForTimeout(300);
+  }
+  await page.unroute('**/api/huggingface/search');
+  check('the retry asks for page 3 again rather than skipping to 4', retriedPage, 3);
+  check('the retry loads more rows', retryGrew, true);
+
+  const allIds = await page.locator('.huggingface-search-open-button').evaluateAll(
+    nodes => nodes.map(n => n.dataset.modelId));
+  check('no repo is listed twice', new Set(allIds).size, allIds.length);
+
+  const induced = consoleErrors.splice(errorsBeforeInducedFailure).filter(
+    e => !/Search Submit Error|Failed to fetch/.test(e));
+  // Anything logged during the abort window that was not the abort goes back
+  consoleErrors.push(...induced);
 
   console.log('A result hands off to the Download tab');
   const targetId = await page.locator('.huggingface-search-open-button').first()

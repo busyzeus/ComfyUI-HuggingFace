@@ -17,13 +17,18 @@ export async function handleSearchSubmit(ui, { append = false } = {}) {
     ui.searchSubmitButton.textContent = 'Searching...';
     ui.ensureFontAwesome();
 
+    // searchState.page only advances once the page is actually in hand. Bumping
+    // it up front means a failed Load more leaves it advanced, and the retry
+    // silently skips a page.
+    const requestedPage = append ? ui.searchState.page + 1 : 1;
+
     const params = {
         query: ui.searchState.query,
         category: ui.searchState.category,
         comfyui_only: ui.searchState.comfyuiOnly,
         sort: ui.searchState.sort,
         limit: ui.searchState.limit,
-        page: ui.searchState.page,
+        page: requestedPage,
         api_key: ui.settings.apiKey,
     };
 
@@ -33,6 +38,7 @@ export async function handleSearchSubmit(ui, { append = false } = {}) {
             throw new Error("Received invalid data from the search API.");
         }
 
+        ui.searchState.page = requestedPage;
         ui.renderSearchResults(response.items, { append });
 
         if (ui.searchLoadMoreButton) {
@@ -41,7 +47,11 @@ export async function handleSearchSubmit(ui, { append = false } = {}) {
     } catch (error) {
         const message = `Search failed: ${error.details || error.message || 'Unknown error'}`;
         console.error("Search Submit Error:", error);
-        if (!append) {
+        if (append) {
+            // Put the button back, or the only way out is a fresh search that
+            // throws away the pages already loaded.
+            if (ui.searchLoadMoreButton) ui.searchLoadMoreButton.style.display = '';
+        } else {
             ui.searchResultsContainer.innerHTML = `<p style="color: var(--error-text, #ff6b6b);">${message}</p>`;
         }
         ui.showToast(message, 'error');
@@ -52,6 +62,5 @@ export async function handleSearchSubmit(ui, { append = false } = {}) {
 }
 
 export async function handleSearchLoadMore(ui) {
-    ui.searchState.page += 1;
     await handleSearchSubmit(ui, { append: true });
 }
