@@ -1,5 +1,10 @@
 // Renders active/queued/history download lists
 
+// Filenames and repo names come from arbitrary repos, and error messages are
+// raw HuggingFace API text - which routinely contains double quotes, so an
+// unescaped one used to break out of the title attribute it sits in.
+import { escapeHtml } from "../utils/escapeHtml.js";
+
 const PLACEHOLDER_IMAGE_URL = `/extensions/ComfyUI-HuggingFace/images/placeholder.jpg`;
 
 export function renderDownloadList(ui, items, container, emptyMessage) {
@@ -35,11 +40,12 @@ export function renderDownloadList(ui, items, container, emptyMessage) {
     const startTime = item.start_time || null;
     const endTime = item.end_time || null;
     const thumbnail = item.thumbnail || PLACEHOLDER_IMAGE_URL;
-    const nsfwLevel = Number(item.thumbnail_nsfw_level ?? 0);
     const connectionType = item.connection_type || "N/A";
 
     let progressBarClass = '';
-    let statusText = status.charAt(0).toUpperCase() + status.slice(1);
+    // Escaped here rather than at its three use sites; the switch below only
+    // ever replaces it with literals.
+    let statusText = escapeHtml(status.charAt(0).toUpperCase() + status.slice(1));
     switch (status) {
       case 'completed': progressBarClass = 'completed'; break;
       case 'failed': progressBarClass = 'failed'; statusText = 'Failed'; break;
@@ -56,22 +62,27 @@ export function renderDownloadList(ui, items, container, emptyMessage) {
     const startedTooltip = startTime ? `data-tooltip="Started: ${new Date(startTime).toLocaleString()}"` : '';
     const endedTooltip = endTime ? `data-tooltip="Ended: ${new Date(endTime).toLocaleString()}"` : '';
     const durationTooltip = startTime && endTime ? `data-tooltip="Duration: ${ui.formatDuration(startTime, endTime)}"` : '';
-    const filenameTooltip = filename !== 'N/A' ? `title="Filename: ${filename}"` : '';
-    const errorTooltip = errorMsg ? `title="Error Details: ${String(errorMsg).substring(0, 200)}${String(errorMsg).length > 200 ? '...' : ''}"` : '';
-    const connectionInfoHtml = connectionType !== "N/A" ? `<span style="font-size: 0.85em; color: #aaa; margin-left: 10px;">(Conn: ${connectionType})</span>` : '';
+    const truncate = (value, limit) => {
+      const text = String(value);
+      return escapeHtml(text.substring(0, limit)) + (text.length > limit ? '...' : '');
+    };
+
+    const filenameTooltip = filename !== 'N/A' ? `title="Filename: ${escapeHtml(filename)}"` : '';
+    const errorTooltip = errorMsg ? `title="Error Details: ${truncate(errorMsg, 200)}"` : '';
+    const connectionInfoHtml = connectionType !== "N/A" ? `<span style="font-size: 0.85em; color: #aaa; margin-left: 10px;">(Conn: ${escapeHtml(connectionType)})</span>` : '';
 
     let innerHTML = `
-      <div class="huggingface-thumbnail-container" data-nsfw-level="${Number.isFinite(nsfwLevel) ? nsfwLevel : ''}">
-        <img src="${thumbnail}" alt="thumbnail" class="huggingface-download-thumbnail" loading="lazy" onerror="${onErrorScript}">
+      <div class="huggingface-thumbnail-container">
+        <img src="${escapeHtml(thumbnail)}" alt="thumbnail" class="huggingface-download-thumbnail" loading="lazy" onerror="${onErrorScript}">
       </div>
       <div class="huggingface-download-info">
-        <strong>${modelName}</strong>
-        <p>Ver: ${versionName}</p>
-        <p class="filename" ${filenameTooltip}>${filename}</p>
+        <strong>${escapeHtml(modelName)}</strong>
+        <p>Ver: ${escapeHtml(versionName)}</p>
+        <p class="filename" ${filenameTooltip}>${escapeHtml(filename)}</p>
         ${size > 0 ? `<p>Size: ${ui.formatBytes(size)}</p>` : ''}
-        ${item.file_format ? `<p>Format: ${item.file_format}</p>` : ''}
-        ${item.file_precision || item.file_model_size ? `<p>${item.file_precision ? 'Precision: ' + String(item.file_precision).toUpperCase() : ''}${item.file_precision && item.file_model_size ? ' • ' : ''}${item.file_model_size ? 'Model Size: ' + item.file_model_size : ''}</p>` : ''}
-        ${errorMsg ? `<p class="error-message" ${errorTooltip}><i class="fas fa-exclamation-triangle"></i> ${String(errorMsg).substring(0, 100)}${String(errorMsg).length > 100 ? '...' : ''}</p>` : ''}
+        ${item.file_format ? `<p>Format: ${escapeHtml(item.file_format)}</p>` : ''}
+        ${item.file_precision || item.file_model_size ? `<p>${item.file_precision ? 'Precision: ' + escapeHtml(String(item.file_precision).toUpperCase()) : ''}${item.file_precision && item.file_model_size ? ' • ' : ''}${item.file_model_size ? 'Model Size: ' + escapeHtml(item.file_model_size) : ''}</p>` : ''}
+        ${errorMsg ? `<p class="error-message" ${errorTooltip}><i class="fas fa-exclamation-triangle"></i> ${truncate(errorMsg, 100)}</p>` : ''}
     `;
 
     if (status === 'downloading' || status === 'starting' || status === 'completed') {

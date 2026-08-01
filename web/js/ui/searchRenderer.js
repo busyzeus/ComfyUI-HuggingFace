@@ -1,12 +1,8 @@
 // Rendering of search results list
 // Usage: renderSearchResults(uiInstance, itemsArray, { append })
 
-const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-
 // Repo names, authors and tags come from arbitrary repos, so never inject them.
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, ch => ESCAPES[ch]);
-}
+import { escapeHtml } from "../utils/escapeHtml.js";
 
 function formatCount(value) {
   return Number(value || 0).toLocaleString();
