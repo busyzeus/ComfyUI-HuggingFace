@@ -1,6 +1,7 @@
 # ================================================
 # File: server/routes/DownloadModel.py
 # ================================================
+import asyncio
 import os
 import json
 import traceback
@@ -142,8 +143,12 @@ async def route_download_model(request):
             plan = None
             try:
                 from huggingface_hub import HfApi
-                repo_info = HfApi(token=resolved_api_key).model_info(
-                    target_model_id, revision=ref_name)
+                # Synchronous and requests-backed, so it runs off the event
+                # loop - otherwise every whole-repo download freezes ComfyUI
+                # until HuggingFace answers.
+                repo_info = await asyncio.to_thread(
+                    lambda: HfApi(token=resolved_api_key).model_info(
+                        target_model_id, revision=ref_name))
                 plan = plan_split_layout([s.rfilename for s in (repo_info.siblings or [])])
             except Exception as e:
                 print(f"[HF Download] Could not inspect {target_model_id} for a split layout: {e}")

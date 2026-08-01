@@ -1,12 +1,8 @@
 // Renders the download preview panel
 
-const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-
 // Model card text and filenames come from an arbitrary repo, so they are never
 // injected as HTML.
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, ch => ESCAPES[ch]);
-}
+import { escapeHtml } from "../utils/escapeHtml.js";
 
 // A repo whose files each belong in a different models/ folder has no single
 // correct save location, so the form stops offering one.
