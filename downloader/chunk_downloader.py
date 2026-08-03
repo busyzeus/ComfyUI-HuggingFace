@@ -207,8 +207,12 @@ class ChunkDownloader:
                             print(f"[Downloader {self.download_id}] Segment {segment_index} cancelled mid-stream.")
                             # Ensure error is set if not already
                             if not self.error: self.error = "Cancelled during segment download"
-                            
-                            
+                            # Return rather than break: falling through to the
+                            # size check below would raise a mismatch, which the
+                            # retry loop would treat as a transient failure and
+                            # re-request the segment.
+                            return
+
                         if chunk:
                             bytes_written = f.write(chunk)
                             bytes_written_this_segment += bytes_written
