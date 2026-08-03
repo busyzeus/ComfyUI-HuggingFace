@@ -22,19 +22,8 @@ export function renderDownloadList(ui, items, container, emptyMessage) {
     const size = item.known_size !== undefined && item.known_size !== null ? item.known_size : (item.file_size || 0);
     const downloadedBytes = size > 0 ? size * (progress / 100) : 0;
     const errorMsg = item.error || null;
-    
-    // Debug: log what we receive from backend
-    console.log(`[DEBUG Frontend] Item data:`, {
-        huggingface_model_name: item.huggingface_model_name,
-        model_name: item.model_name,
-        model: item.model,
-        version_name: item.version_name,
-        full_item: item  // Log the full item to see all available fields
-    });
-    
-    const modelName = item.huggingface_model_name || item.model_name || item.model?.name || 'Unknown Model';
-    console.log(`[DEBUG Frontend] Final modelName: ${modelName}`);
-    const versionName = item.version_name || 'Unknown Version';
+
+    const modelName = item.huggingface_model_name || item.model_name || 'Unknown Model';
     const filename = item.filename || 'N/A';
     const addedTime = item.added_time || null;
     const startTime = item.start_time || null;
@@ -77,11 +66,8 @@ export function renderDownloadList(ui, items, container, emptyMessage) {
       </div>
       <div class="huggingface-download-info">
         <strong>${escapeHtml(modelName)}</strong>
-        <p>Ver: ${escapeHtml(versionName)}</p>
         <p class="filename" ${filenameTooltip}>${escapeHtml(filename)}</p>
         ${size > 0 ? `<p>Size: ${ui.formatBytes(size)}</p>` : ''}
-        ${item.file_format ? `<p>Format: ${escapeHtml(item.file_format)}</p>` : ''}
-        ${item.file_precision || item.file_model_size ? `<p>${item.file_precision ? 'Precision: ' + escapeHtml(String(item.file_precision).toUpperCase()) : ''}${item.file_precision && item.file_model_size ? ' • ' : ''}${item.file_model_size ? 'Model Size: ' + escapeHtml(item.file_model_size) : ''}</p>` : ''}
         ${errorMsg ? `<p class="error-message" ${errorTooltip}><i class="fas fa-exclamation-triangle"></i> ${truncate(errorMsg, 100)}</p>` : ''}
     `;
 
