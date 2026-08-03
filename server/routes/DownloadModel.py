@@ -17,7 +17,6 @@ from ...utils.helpers import (
     get_model_dir, parse_huggingface_input, sanitize_filename, hf_ref_from_url,
     plan_split_layout,
 )
-from ...config import METADATA_SUFFIX, PREVIEW_SUFFIX
 
 prompt_server = server.PromptServer.instance
 

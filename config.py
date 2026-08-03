@@ -11,7 +11,6 @@ DEFAULT_CONNECTIONS = 4
 DOWNLOAD_HISTORY_LIMIT = 100
 DOWNLOAD_TIMEOUT = 60 # Timeout for individual download chunks/requests (seconds)
 HEAD_REQUEST_TIMEOUT = 25 # Timeout for initial HEAD request (seconds)
-METADATA_DOWNLOAD_TIMEOUT = 20 # Timeout for downloading thumbnail (seconds)
 
 # --- Paths ---
 # The root directory of *this specific plugin/extension*
@@ -51,10 +50,6 @@ MODEL_TYPE_DIRS = {
     # 'other' will save to a dedicated folder inside the HuggingFace extension directory
     "other": ("Other", None)
 }
-
-# --- Filename Suffixes ---
-METADATA_SUFFIX = ".cminfo.json"
-PREVIEW_SUFFIX = ".preview.jpeg" # Keep as requested, even if source is png/webp
 
 # --- Log Initial Paths for Verification ---
 print("-" * 30)

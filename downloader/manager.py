@@ -5,11 +5,9 @@ import threading
 import time
 import datetime
 import os
-import json                     
-import requests
+import json
 import subprocess
 import platform
-import sys
 from typing import List, Dict, Any, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -17,7 +15,7 @@ if TYPE_CHECKING:
 
 from ..config import (
     MAX_CONCURRENT_DOWNLOADS, DOWNLOAD_HISTORY_LIMIT, DEFAULT_CONNECTIONS,
-    METADATA_SUFFIX, PREVIEW_SUFFIX, METADATA_DOWNLOAD_TIMEOUT, PLUGIN_ROOT 
+    PLUGIN_ROOT
 )
 try:
     from folder_paths import get_directory_by_type, get_valid_path, base_path
@@ -455,142 +453,6 @@ class DownloadManager:
                     item["connection_type"] = connection_type
                     updated = True
 
-    # --- _save_huggingface_metadata remains the same ---
-    def _save_huggingface_metadata(self, download_info: Dict[str, Any]):
-        """Saves the .cminfo.json file."""
-        # ... (no changes needed here) ...
-        output_path = download_info.get('output_path')
-        model_info = download_info.get('huggingface_model_info', {})
-        version_info = download_info.get('huggingface_version_info', {})
-        primary_file = download_info.get('huggingface_primary_file', {})
-        download_id = download_info.get('id', 'unknown')
-
-        try:
-            file_meta = primary_file.get('metadata', {}) or {} # Ensure dict
-            creator_info = model_info.get('creator', {}) or {}
-            model_stats = model_info.get('stats', {}) or {}
-            version_stats = version_info.get('stats', {}) or {}
-
-            metadata = {
-                "ModelId": model_info.get('id', version_info.get('modelId')) , # Use .get() on version info too
-                "ModelName": model_info.get('name', version_info.get('model',{}).get('name')), # Nested .get()
-                "ModelDescription": model_info.get('description'),
-                "CreatorUsername": creator_info.get('username'),
-                "Nsfw": model_info.get('nsfw', version_info.get('model',{}).get('nsfw')),
-                "Poi": model_info.get('poi', version_info.get('model',{}).get('poi')),
-                "AllowNoCredit": model_info.get('allowNoCredit', True),
-                "AllowCommercialUse": str(model_info.get('allowCommercialUse', 'Unknown')), # Ensure string
-                "AllowDerivatives": model_info.get('allowDerivatives', True),
-                "AllowDifferentLicense": model_info.get('allowDifferentLicense', True),
-                "Tags": model_info.get('tags', []),
-                "ModelType": model_info.get('type'),
-                "VersionId": version_info.get('id'),
-                "VersionName": version_info.get('name'),
-                "VersionDescription": version_info.get('description'),
-                "BaseModel": version_info.get('baseModel'),
-                "BaseModelType": version_info.get('baseModelType'),
-                "EarlyAccessDeadline": version_info.get('earlyAccessDeadline'),
-                "VersionPublishedAt": version_info.get('publishedAt'),
-                "VersionUpdatedAt": version_info.get('updatedAt'),
-                "VersionStatus": version_info.get('status'),
-                "IsPrimaryFile": primary_file.get('primary', False),
-                "PrimaryFileId": primary_file.get('id'),
-                "PrimaryFileName": primary_file.get('name'),
-                "FileMetadata": {
-                    "fp": file_meta.get('fp'),
-                    "size": file_meta.get('size'),
-                    "format": file_meta.get('format', 'Unknown')
-                },
-                "ImportedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                "Hashes": primary_file.get('hashes', {}),
-                "TrainedWords": version_info.get('trainedWords', []),
-                "Stats": {
-                    "downloadCount": version_stats.get('downloadCount', model_stats.get('downloadCount', 0)),
-                    "rating": version_stats.get('rating', model_stats.get('rating', 0)),
-                    "ratingCount": version_stats.get('ratingCount', model_stats.get('ratingCount', 0)),
-                    "favoriteCount": version_stats.get('favoriteCount', model_stats.get('favoriteCount', 0)), # Correct source needed? Check API docs
-                    "commentCount": version_stats.get('commentCount', model_stats.get('commentCount', 0)), # Correct source needed? Check API docs
-                    "thumbsUpCount": version_stats.get('thumbsUpCount', 0),
-                 },
-                 "DownloadUrlUsed": download_info.get('url'),
-            }
-
-            base, _ = os.path.splitext(output_path)
-            meta_filename = base + METADATA_SUFFIX
-            meta_path = os.path.join(os.path.dirname(output_path), meta_filename)
-
-            print(f"[Manager Meta {download_id}] Saving metadata to: {meta_path}")
-            with open(meta_path, 'w', encoding='utf-8') as f:
-                json.dump(metadata, f, indent=2, ensure_ascii=False)
-            print(f"[Manager Meta {download_id}] Metadata saved successfully.")
-
-        except Exception as e:
-            import traceback
-            print(f"[Manager Meta {download_id}] Error saving metadata file {meta_path}: {e}")
-            # traceback.print_exc() # Uncomment for full trace
-
-    # --- _download_and_save_preview remains the same ---
-    def _download_and_save_preview(self, download_info: Dict[str, Any]):
-        """Downloads and saves the .preview.jpeg file."""
-        # ... (no changes needed here) ...
-        output_path = download_info.get('output_path')
-        thumbnail_url = download_info.get('thumbnail')
-        api_key = download_info.get('api_key')
-        download_id = download_info.get('id', 'unknown')
-
-        if not output_path:
-             print(f"[Manager Preview {download_id}] Skipping preview download: Missing output path.")
-             return
-        if not thumbnail_url:
-             print(f"[Manager Preview {download_id}] Skipping preview download: No thumbnail URL provided.")
-            # Optionally try to find one in version_info images again? Might be redundant.
-             version_info = download_info.get('huggingface_version_info', {})
-             if version_info and isinstance(version_info.get('images'), list) and version_info['images']:
-                  sorted_images = sorted([img for img in version_info['images'] if img and img.get("url")], key=lambda x: x.get('index', 0))
-                  img_data = next((img for img in sorted_images if img.get("type") == "image" and "/width=" in img.get("url","")), None) # Prefer image type with width param
-                  if not img_data: img_data = next((img for img in sorted_images if img.get("type") == "image"), None) # Fallback to any image type
-                  if not img_data: img_data = next((img for img in sorted_images), None) # Fallback to any image at all
-                  if img_data and img_data.get('url'):
-                       thumbnail_url = img_data['url']
-                       # Attempt to get a reasonable size (e.g. ~450px width)
-                       if "/width=" in thumbnail_url:
-                            thumbnail_url = thumbnail_url.split("/width=")[0] + "/width=450"
-                       elif "/blob/" not in thumbnail_url: # Avoid adding params to blob URLs
-                           separator = "&" if "?" in thumbnail_url else "?"
-                           thumbnail_url += f"{separator}width=450"
-                       print(f"[Manager Preview {download_id}] Found alternative thumbnail URL: {thumbnail_url}")
-                  else:
-                      print(f"[Manager Preview {download_id}] Still no thumbnail URL found in version info.")
-                      return # Exit if still no URL
-             else:
-                 return # Exit if no URL and no version info to search
-
-        base, _ = os.path.splitext(output_path)
-        preview_filename = base + PREVIEW_SUFFIX
-        preview_path = os.path.join(os.path.dirname(output_path), preview_filename)
-
-        print(f"[Manager Preview {download_id}] Downloading thumbnail from {thumbnail_url} to {preview_path}")
-        response = None
-        try:
-            headers = {}
-            if api_key: headers["Authorization"] = f"Bearer {api_key}"
-            response = requests.get(thumbnail_url, stream=True, headers=headers, timeout=METADATA_DOWNLOAD_TIMEOUT, allow_redirects=True)
-            response.raise_for_status()
-            content_type = response.headers.get('Content-Type', '').lower()
-            if not content_type.startswith('image/'):
-                 print(f"[Manager Preview {download_id}] Warning: Thumbnail URL returned non-image content type '{content_type}'. Skipping save.")
-                 return
-            with open(preview_path, 'wb') as f:
-                 for chunk in response.iter_content(chunk_size=8192): f.write(chunk)
-            print(f"[Manager Preview {download_id}] Thumbnail downloaded successfully.")
-        except requests.exceptions.RequestException as e:
-             error_msg = f"Error downloading thumbnail {thumbnail_url}: {e}"
-             if hasattr(e, 'response') and e.response is not None: error_msg += f" (Status: {e.response.status_code})"
-             print(f"[Manager Preview {download_id}] {error_msg}")
-        except Exception as e: print(f"[Manager Preview {download_id}] Error saving thumbnail {preview_path}: {e}")
-        finally:
-            if response: response.close()
-
     # --- _download_file_wrapper remains the same ---
     def _download_file_wrapper(self, download_info: Dict[str, Any]):
         """Wraps the download execution, handles status updates, exceptions, and metadata saving."""
@@ -694,11 +556,6 @@ class DownloadManager:
             if success:
                 final_status = "completed"
                 print(f"[Downloader Wrapper {download_id}] Download completed successfully for '{filename}'.")
-                try:
-                    self._save_huggingface_metadata(download_info)
-                    self._download_and_save_preview(download_info)
-                except Exception as meta_err:
-                     print(f"[Downloader Wrapper {download_id}] Error during post-download metadata/preview saving: {meta_err}")
 
             elif downloader.is_cancelled:
                 final_status = "cancelled"
