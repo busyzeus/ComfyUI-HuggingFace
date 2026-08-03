@@ -6,7 +6,10 @@ console.log("Loading HuggingFace UI...");
 
 // --- Configuration ---
 const EXTENSION_NAME = "HuggingFace";
-const CSS_URL = `../huggingfaceDownloader.css`;
+// Resolved here rather than passed as a bare relative path: addCssLink used to
+// resolve against its own module, so a path written in this file was silently
+// relative to utils/dom.js instead.
+const CSS_URL = new URL("../css/huggingfaceDownloader.css", import.meta.url).href;
 const PLACEHOLDER_IMAGE_URL = `/extensions/ComfyUI-HuggingFace/images/placeholder.jpg`;
 
 // Add Menu Button to ComfyUI

@@ -8,11 +8,11 @@ import os
 EXTENSION_ROOT = os.path.dirname(os.path.realpath(__file__))
 WEB_PATH = os.path.join(EXTENSION_ROOT, "web")
 JS_PATH = os.path.join(WEB_PATH, "js")
-# CSS_PATH definition removed as it was unused and pointed to a non-existent directory.
+CSS_PATH = os.path.join(WEB_PATH, "css")
 JS_FILENAME = "huggingfaceDownloader.js"
 CSS_FILENAME = "huggingfaceDownloader.css"
 JS_FILE_PATH = os.path.join(JS_PATH, JS_FILENAME)
-CSS_FILE_PATH = os.path.join(JS_PATH, CSS_FILENAME) 
+CSS_FILE_PATH = os.path.join(CSS_PATH, CSS_FILENAME)
 
 # --- Import Core Components ---
 # Import configurations and utility functions first
@@ -49,7 +49,7 @@ if not os.path.exists(CSS_FILE_PATH):
     print(f"[HuggingFace] WARNING: Frontend CSS file not found!")
     print(f"                         Expected at: {CSS_FILE_PATH}")
     print("                         The downloader UI may not display correctly.")
-    print(f"                         Please ensure '{CSS_FILENAME}' is placed in the '{os.path.basename(JS_PATH)}' directory inside 'web'.") # Corrected path hint
+    print(f"                         Please ensure '{CSS_FILENAME}' is placed in the '{os.path.basename(CSS_PATH)}' directory inside 'web'.")
     print("*"*80)
     frontend_files_ok = False
 

@@ -17,10 +17,10 @@ HEAD_REQUEST_TIMEOUT = 25 # Timeout for initial HEAD request (seconds)
 # Calculated based on the location of this config.py file
 PLUGIN_ROOT = os.path.dirname(os.path.realpath(__file__))
 
-# Construct web paths relative to the plugin's root directory
+# Construct web paths relative to the plugin's root directory.
+# __init__.py deliberately recomputes the js/ and css/ paths for its startup
+# file check, because it has to warn even when importing this module fails.
 WEB_DIRECTORY = os.path.join(PLUGIN_ROOT, "web")
-JAVASCRIPT_PATH = os.path.join(WEB_DIRECTORY, "js")
-CSS_PATH = os.path.join(WEB_DIRECTORY, "css")
 
 # Get ComfyUI directories using folder_paths
 COMFYUI_ROOT_DIR = folder_paths.base_path

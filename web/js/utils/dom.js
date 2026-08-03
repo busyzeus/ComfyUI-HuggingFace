@@ -2,16 +2,19 @@
 
 /**
  * Dynamically adds a CSS link to the document's head.
- * It resolves the path relative to this script's location using import.meta.url,
- * making it robust against case-sensitivity issues and different install paths.
- * @param {string} relativeHref - Relative path to the CSS file (e.g., '../huggingfaceDownloader.css').
+ *
+ * Prefer passing an absolute URL the caller built from its own
+ * `import.meta.url`. A bare relative path still works, but it resolves against
+ * THIS file rather than the caller's, which reads as a bug at the call site.
+ * @param {string} href - Absolute URL of the CSS file, or a path relative to this module.
  * @param {string} [id="huggingface-downloader-styles"] - The ID for the link element.
  */
-export function addCssLink(relativeHref, id = "huggingface-downloader-styles") {
+export function addCssLink(href, id = "huggingface-downloader-styles") {
   if (document.getElementById(id)) return; // Prevent duplicates
 
   try {
-    const absoluteUrl = new URL(relativeHref, import.meta.url);
+    // An already-absolute URL passes through this unchanged
+    const absoluteUrl = new URL(href, import.meta.url);
 
     const link = document.createElement("link");
     link.id = id;
