@@ -10,7 +10,7 @@ from typing import Optional, List, Dict, Any
 import folder_paths 
 
 # Import config values needed here
-from ..config import PLUGIN_ROOT, MODEL_TYPE_DIRS
+from ..config import PLUGIN_ROOT
 
 # Canonical aliases for model type/folder names. Values are preferred folder names.
 MODEL_TYPE_ALIASES = {
