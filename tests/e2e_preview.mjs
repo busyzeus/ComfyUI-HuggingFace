@@ -91,13 +91,11 @@ try {
   await button.waitFor({ state: 'visible', timeout: 90000 });
   await button.click();
 
-  // Checked before the first click, deliberately. The stylesheet is fetched by
-  // JS from a path this repo has moved, and if it fails the modal is not laid
-  // out as an overlay, so ComfyUI's own menu swallows the clicks below and the
-  // run dies on a 30s Playwright timeout that says nothing about CSS. Asserting
-  // a rule only the stylesheet supplies turns that into a straight answer.
-  // 'attached', not the default 'visible' - when the stylesheet is working this
-  // panel is display:none, which is exactly what the check below asserts.
+  // Before the first click, deliberately: without the stylesheet the modal is
+  // not laid out as an overlay, ComfyUI's own menu swallows every click below,
+  // and the run dies on a timeout that says nothing about CSS. Waits for
+  // 'attached' rather than the default 'visible' because a working stylesheet
+  // is precisely what makes this panel display:none.
   await page.locator('#huggingface-tab-search').waitFor({ state: 'attached', timeout: 30000 });
   check('the stylesheet loaded',
     await page.locator('#huggingface-tab-search').evaluate(
