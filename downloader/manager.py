@@ -18,16 +18,32 @@ from ..config import (
     PLUGIN_ROOT
 )
 try:
-    from folder_paths import get_directory_by_type, get_valid_path, base_path
+    import folder_paths
+    from folder_paths import get_directory_by_type, base_path
     COMFY_PATHS_AVAILABLE = True
 except ImportError:
     print("[HuggingFace Manager] Warning: ComfyUI folder_paths not available. Path validation/opening might be limited.")
     COMFY_PATHS_AVAILABLE = False
+    folder_paths = None
     base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 # --- Define History File Path ---
 # Place it in the root of the extension directory
 HISTORY_FILE_PATH = os.path.join(PLUGIN_ROOT, "download_history.json")
+
+
+def _contains(parent: str, child: str) -> bool:
+    """Is `child` inside `parent`?
+
+    os.path.commonpath raises ValueError for paths on different drives. That
+    means "not inside this one", not "abandon the check" - letting it propagate
+    turned a model saved on another drive into the bewildering
+    "Error processing path: Paths don't have the same drive".
+    """
+    try:
+        return os.path.commonpath([parent, child]) == parent
+    except ValueError:
+        return False
 
 class DownloadManager:
     """Manages a queue of downloads, running them concurrently and saving metadata."""
@@ -704,13 +720,24 @@ class DownloadManager:
 
             # Option 1: Check against ComfyUI's known directories (preferred)
             if COMFY_PATHS_AVAILABLE:
-                 # Check if the folder is within any known model type directory
+                 # Check if the folder is within any known model type directory.
+                 # get_folder_paths is the lookup for model types, and it honours
+                 # extra_model_paths.yaml so roots outside models/ count too.
+                 # get_directory_by_type answers only for output, temp and input,
+                 # so asking it for "checkpoints" returned None and this list
+                 # used to come out empty - every model folder was refused.
                  known_types = [
                      "checkpoints", "loras", "vae", "embeddings", "hypernetworks",
                      "controlnet", "upscale_models", "clip_vision", "gligen", "configs",
-                     "unet", "diffusers", "motion_models", "poses", "wildcards"
+                     "unet", "diffusion_models", "text_encoders", "diffusers",
+                     "motion_models", "poses", "wildcards"
                  ]
-                 known_dirs = [os.path.abspath(get_directory_by_type(t)) for t in known_types if get_directory_by_type(t)]
+                 known_dirs = []
+                 for _type in known_types:
+                     try:
+                         known_dirs.extend(folder_paths.get_folder_paths(_type) or [])
+                     except Exception:
+                         pass
                  # Also allow output and input directories
                  if get_directory_by_type("output"): known_dirs.append(os.path.abspath(get_directory_by_type("output")))
                  if get_directory_by_type("input"): known_dirs.append(os.path.abspath(get_directory_by_type("input")))
@@ -732,10 +759,7 @@ class DownloadManager:
                  except Exception as _e:
                      print(f"[Manager OpenPath] Warning: Failed to load custom roots: {_e}")
                  # Include all first-level subdirectories under models_dir as safe
-                 try:
-                     models_dir = getattr(__import__('folder_paths'), 'folder_paths').models_dir
-                 except Exception:
-                     models_dir = None
+                 models_dir = getattr(folder_paths, 'models_dir', None)
                  try:
                      if models_dir and os.path.isdir(models_dir):
                          for _name in os.listdir(models_dir):
@@ -746,13 +770,12 @@ class DownloadManager:
                      print(f"[Manager OpenPath] Warning: Failed enumerating models_dir subfolders: {_e2}")
 
                  for known_dir in known_dirs:
-                      if os.path.commonpath([known_dir, folder_path]) == known_dir:
+                      if _contains(os.path.abspath(known_dir), folder_path):
                            is_safe_path = True
                            break
             else:
                  # Option 2: Fallback - Check if path is within the ComfyUI base directory
-                 comfy_base = os.path.abspath(base_path)
-                 if os.path.commonpath([comfy_base, folder_path]) == comfy_base:
+                 if _contains(os.path.abspath(base_path), folder_path):
                       is_safe_path = True
                       #print(f"[Manager OpenPath Warning] ComfyUI paths unavailable. Using base path check for {folder_path}")
 
