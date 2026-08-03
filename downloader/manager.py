@@ -614,7 +614,6 @@ class DownloadManager:
             # Make a deep copy to avoid modifying the history item directly
             try:
                 retry_info = json.loads(json.dumps(original_info))
-                print(retry_info)
             except Exception as e:
                  return {"success": False, "error": f"Failed to copy original download data: {e}"}
 
@@ -633,44 +632,44 @@ class DownloadManager:
             # This ensures it overwrites the potentially corrupted/partial file from the previous attempt.
             retry_info["force_redownload"] = True
 
-            # --- Validate required fields for queuing (redundant check, but safe) ---
-            required_for_retry = [
-                'url', 'output_path', 'num_connections', 'api_key', 'known_size',
-                'huggingface_model_info',
-                'thumbnail', 'filename', 'model_url_or_id', 'model_type',
-                'custom_filename', 'force_redownload'
-            ]
-            missing_keys = [key for key in required_for_retry if key not in retry_info or retry_info[key] is None and key != 'api_key' and key != 'custom_filename'] # Allow api_key/custom_filename to be None
-            #if missing_keys:
-            #    return {"success": False, "error": f"Cannot retry: Original download data is missing required fields: {', '.join(missing_keys)}"}
+            # add_to_queue fills in whatever the history item is missing, so
+            # there is nothing left to validate here.
 
         # --- Add the prepared info to the queue (outside the lock for add_to_queue's own lock) ---
         # Note: add_to_queue acquires its own lock internally
         try:
             new_download_id = self.add_to_queue(retry_info)
-            if new_download_id: # Check if add_to_queue returned a valid ID (indicating success)
-                with self.lock:
-                    original_len = len(self.history)
-                    # Filter out the item matching the original ID
-                    self.history = [item for item in self.history if item.get("id") != original_download_id]
-                    items_removed = original_len - len(self.history)
-
-                    if items_removed == 1:
-                        print(f"[Manager] Successfully removed original download '{original_download_id}' from history.")
-                        return {
-                            "success": True,
-                            "message": f"Retry initiated. New download queued. Original removed from history.",
-                            "new_download_id": new_download_id
-                        }
-
-            else:
-                # Should have been caught by the except block, but as a failsafe
-                print(f"[Manager] Retry queueing failed for '{original_download_id}' for an unknown reason (no ID returned).")
-                return {"success": False, "error": "Failed to queue retry (unknown internal error)."}
-        
         except Exception as e:
-             print(f"[Manager] Error requeuing download for retry (Original ID: {original_download_id}): {e}")
-             return {"success": False, "error": f"Failed to queue retry: {e}"}
+            print(f"[Manager] Error requeuing download for retry (Original ID: {original_download_id}): {e}")
+            return {"success": False, "error": f"Failed to queue retry: {e}"}
+
+        if not new_download_id:
+            # Should have been caught by the except block, but as a failsafe
+            print(f"[Manager] Retry queueing failed for '{original_download_id}' for an unknown reason (no ID returned).")
+            return {"success": False, "error": "Failed to queue retry (unknown internal error)."}
+
+        # The retry is queued, so this call has succeeded whatever the history
+        # looks like now. Dropping the original row is cleanup, and it can
+        # legitimately already be gone - a concurrent retry of the same id, or a
+        # clear_history between the two lock acquisitions. That must not fall
+        # through without a return value: the route calls .get() on the result.
+        with self.lock:
+            length_before = len(self.history)
+            self.history = [item for item in self.history if item.get("id") != original_download_id]
+            removed = len(self.history) != length_before
+            if removed:
+                # Keep the file in step, or the original reappears on restart
+                self._save_history_to_file()
+                print(f"[Manager] Removed original download '{original_download_id}' from history.")
+            else:
+                print(f"[Manager] Original download '{original_download_id}' was already gone from history.")
+
+        return {
+            "success": True,
+            "message": ("Retry initiated. New download queued. Original removed from history."
+                        if removed else "Retry initiated. New download queued."),
+            "new_download_id": new_download_id,
+        }
 
     # --- NEW: Open Containing Folder Method ---
     def open_containing_folder(self, download_id: str) -> Dict[str, Any]:
