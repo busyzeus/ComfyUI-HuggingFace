@@ -58,8 +58,6 @@ def _queue_split_layout(plan, *, model_url_or_id, model_id, ref, model_info,
             "force_redownload": force_redownload,
             "api_key": api_key,
             "known_size": None,
-            "huggingface_version_info": {},
-            "huggingface_primary_file": None,
             "thumbnail": None,
             "custom_filename": "",
             "huggingface_model_name": model_info.get("name"),
@@ -222,8 +220,6 @@ async def route_download_model(request):
             # Add missing fields to prevent warnings
             "api_key": resolved_api_key,
             "known_size": None,
-            "huggingface_version_info": {},
-            "huggingface_primary_file": None,
             "thumbnail": None,
             "custom_filename": custom_filename_input,
             "huggingface_model_name": model_info.get("name", target_model_id.split('/')[-1])

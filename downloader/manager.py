@@ -70,7 +70,7 @@ class DownloadManager:
             # (Most were likely already filled by the calling route, but double-check)
             required_for_retry = [
                 'url', 'output_path', 'num_connections', 'api_key', 'known_size',
-                'huggingface_model_info', 'huggingface_version_info', 'huggingface_primary_file',
+                'huggingface_model_info',
                 'thumbnail', 'filename', 'model_url_or_id', 'model_type',
                 'custom_filename', 'force_redownload', 'huggingface_model_name'  # Add huggingface_model_name!
             ]
@@ -78,7 +78,7 @@ class DownloadManager:
                 if key not in download_info:
                     # Add default or None if missing. More robust handling might be needed
                     # depending on how routes.py prepares the dict.
-                    if key in ['huggingface_model_info', 'huggingface_version_info', 'huggingface_primary_file']:
+                    if key == 'huggingface_model_info':
                         download_info[key] = {}
                     elif key == 'num_connections':
                         download_info[key] = DEFAULT_CONNECTIONS
@@ -182,7 +182,7 @@ class DownloadManager:
         with self.lock:
             # Fields to exclude when sending status to UI
             exclude_fields_for_ui = [
-                'downloader_instance', 'huggingface_model_info', 'huggingface_version_info',
+                'downloader_instance', 'huggingface_model_info',
                 'api_key', # Don't send API key to frontend status
                 # Large potentially redundant fields:
                 'url', 'output_path', 'custom_filename', 'model_url_or_id',
@@ -636,7 +636,7 @@ class DownloadManager:
             # --- Validate required fields for queuing (redundant check, but safe) ---
             required_for_retry = [
                 'url', 'output_path', 'num_connections', 'api_key', 'known_size',
-                'huggingface_model_info', 'huggingface_version_info', 'huggingface_primary_file',
+                'huggingface_model_info',
                 'thumbnail', 'filename', 'model_url_or_id', 'model_type',
                 'custom_filename', 'force_redownload'
             ]
