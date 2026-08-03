@@ -12,7 +12,6 @@ from aiohttp import web
 import server # ComfyUI server instance
 from ..utils import get_request_json, resolve_huggingface_api_key
 from ...downloader.manager import manager as download_manager
-from ...api.huggingface import HuggingFaceAPI
 from ...utils.helpers import (
     get_model_dir, parse_huggingface_input, sanitize_filename, hf_ref_from_url,
     plan_split_layout,
@@ -95,37 +94,12 @@ async def route_download_model(request):
         target_model_id = parsed_model_id
         print(f"[HF Download] Parsed Model ID: {target_model_id}")
         
-        # Initialize API
-        api = HuggingFaceAPI(resolved_api_key)
-        
-        if parsed_filename:
-            # Direct download from URL - skip API calls
-            target_filename = parsed_filename
-            # Try to get model name from the model_id itself
-            model_name = target_model_id.split('/')[-1] if target_model_id else "Unknown Model"
-            model_info = {"id": target_model_id, "name": model_name}
-            print(f"[HF Download] Direct download file: {target_filename}")
-            print(f"[HF Download] Using extracted model name: {model_name}")
-        else:
-            # Skip API calls for public repos, use only huggingface_hub
-            if resolved_api_key:
-                # For private repos, try API calls to get model info
-                api = HuggingFaceAPI(resolved_api_key)
-                model_info = api.get_model_info(target_model_id)
-                
-                if not model_info or "error" in model_info:
-                    print(f"[HF Download] Model info failed, using huggingface_hub directly")
-                    target_filename = parsed_filename if parsed_filename else None
-                    model_info = {"id": target_model_id, "name": target_model_id.split('/')[-1]}
-                else:
-                    # For private repos, still use huggingface_hub for download
-                    target_filename = parsed_filename if parsed_filename else None
-            else:
-                # For public repos, skip API calls entirely
-                print(f"[HF Download] Public repo, using huggingface_hub directly")
-                target_filename = parsed_filename if parsed_filename else None
-                model_info = {"id": target_model_id, "name": target_model_id.split('/')[-1]}
-        
+        # parse_huggingface_input gives us a file path only when the input named
+        # one; otherwise this is a whole-repo request and huggingface_hub works
+        # the rest out from the id.
+        target_filename = parsed_filename
+        model_info = {"id": target_model_id, "name": target_model_id.split('/')[-1]}
+
         if not target_filename:
             print(f"[HF Download] No specific file found, letting huggingface_hub auto-detect")
             target_filename = None
